@@ -1,0 +1,12 @@
+[package]
+name = "sokoban"
+version = "0.1.0"
+authors = ["Erick Pires <pires@erickpires.com>"]
+
+[dependencies.sdl2]
+version = "0.29"
+default-features = false
+features = ["ttf","image","gfx","mixer"]
+
+[dependencies.gl]
+git = "https://github.com/bjz/gl-rs"
