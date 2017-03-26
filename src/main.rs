@@ -19,6 +19,7 @@ use sdl2::controller::Axis::*;
 
 use std::path::Path;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use std::io;
 use std::io::BufRead;
@@ -229,8 +230,7 @@ impl GameInputState {
 
 #[allow(dead_code)]
 #[derive(Clone)]
-#[derive(Copy)]
-struct Sprite<'a> {
+struct Sprite {
     height : u32,
     width  : u32,
 
@@ -239,7 +239,7 @@ struct Sprite<'a> {
     texture_width  : u32,
     texture_height : u32,
 
-    texture : &'a Texture,
+    texture :  Rc<Texture>,
     is_animating: bool,
 
     // TODO(erick): This should not be here. We need an AnimationPlayer
@@ -248,8 +248,8 @@ struct Sprite<'a> {
     frame_time  : f32,
 }
 
-impl<'a> Sprite<'a> {
-    fn new(_texture: &Texture, texture_w: u32, texture_h: u32, w: u32, h: u32) -> Sprite {
+impl Sprite {
+    fn new(_texture: Rc<Texture>, texture_w: u32, texture_h: u32, w: u32, h: u32) -> Sprite {
         let _fps = 16;
 
 
@@ -287,15 +287,15 @@ impl<'a> Sprite<'a> {
 }
 
 #[allow(dead_code)]
-struct Entity<'a> {
+struct Entity {
     position    : Vector2,
     width       : f32,
     height      : f32,
 
-    sprite : Sprite<'a>,
+    sprite : Sprite,
 }
 
-impl<'a> Entity<'a> {
+impl Entity {
     fn new(s: Sprite, p0: Vector2, w: f32, h: f32) -> Entity {
         Entity{
             position    : p0,
@@ -362,10 +362,10 @@ impl TileType {
 }
 
 struct MapData {
-    floor_texture   : Texture,
-    wall_texture    : Texture,
-    target_texture  : Texture,
-    box_texture     : Texture,
+    floor_texture   : Rc<Texture>,
+    wall_texture    : Rc<Texture>,
+    target_texture  : Rc<Texture>,
+    box_texture     : Rc<Texture>,
 
     tile_texture_width  : u32,
     tile_texture_height : u32,
@@ -383,10 +383,10 @@ impl MapData {
         let(_box, b_w, b_h) = texture_from_path(Path::new("assets/box.bmp"), renderer);
 
         MapData {
-            floor_texture : floor,
-            wall_texture    : wall,
-            target_texture  : target,
-            box_texture     : _box,
+            floor_texture   : Rc::new(floor),
+            wall_texture    : Rc::new(wall),
+            target_texture  : Rc::new(target),
+            box_texture     : Rc::new(_box),
 
             tile_texture_width  : w,
             tile_texture_height : h,
@@ -397,14 +397,14 @@ impl MapData {
     }
 }
 
-struct Map<'a> {
+struct Map {
     tiles: Vec<TileType>,
     tiles_stride: i32,
 
-    boxes: Vec<Entity<'a>>
+    boxes: Vec<Entity>
 }
 
-impl<'a> Map<'a> {
+impl<'a> Map {
     fn is_box(code: u32) -> bool {
         code == 2
     }
@@ -415,33 +415,30 @@ impl<'a> Map<'a> {
 
     fn add_box(map: &'a mut Map, map_data: &'a MapData, _x: u32, _y: u32) {
         // TODO(erick): We probably don't need the unsafe here, but this is language is driving me mad.
-        unsafe {
-            let p = &(*map_data).box_texture as *const Texture;
-            let _sprite = Sprite::new(&*p,
-                            map_data.box_texture_width,
-                            map_data.box_texture_height,
-                            map_data.box_texture_width,
-                            map_data.box_texture_height);
+        let _sprite = Sprite::new(map_data.box_texture.clone(),
+                        map_data.box_texture_width,
+                        map_data.box_texture_height,
+                        map_data.box_texture_width,
+                        map_data.box_texture_height);
 
-            let e_box = Entity {
-                position : Vector2 {
-                    x: _x as f32,
-                    y: _y as f32,
-                },
-                height  : 1.0,
-                width   : 1.0,
+        let e_box = Entity {
+            position : Vector2 {
+                x: _x as f32,
+                y: _y as f32,
+            },
+            height  : 1.0,
+            width   : 1.0,
 
-                sprite: _sprite,
-            };
+            sprite: _sprite,
+        };
         map.boxes.push(e_box);
-        }
     }
 
     fn from_left_to_right_handed(position : (u32, u32), n_lines: u32) -> (u32, u32) {
         (position.0, n_lines - position.1)
     }
 
-    fn from_path(path: &Path, map_data: &MapData) -> (Result<Map <'a>, io::Error>, (i32, i32)) {
+    fn from_path(path: &Path, map_data: &MapData) -> (Result<Map, io::Error>, (i32, i32)) {
         let mut result = Map {
             tiles: Vec::new(),
             tiles_stride: -1,
@@ -631,7 +628,7 @@ fn main() {
     //
     // TODO(erick): We should allocate sprites on the Heap.
     let (sprite_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/animate.bmp"), &renderer);
-    let player_sprite = Sprite::new(&sprite_texture, texture_w, texture_h, 128, 82);
+    let player_sprite = Sprite::new(Rc::new(sprite_texture), texture_w, texture_h, 128, 82);
     let mut player = Entity::new(player_sprite, Vector2::new(0.5f32, 0.5f32), 4.0, 4.0 * 82.0 / 128.0);
 
     //
