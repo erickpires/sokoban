@@ -51,6 +51,11 @@ impl Vector2 {
         }
     }
 
+    // TODO(erick): Compare with epsilon
+    fn is_zero(&self) -> bool {
+        self.x == 0.0 && self.y == 0.0
+    }
+
     fn new(x0: f32, y0: f32) -> Vector2 {
         Vector2{
             x: x0,
@@ -384,6 +389,7 @@ impl Sprite {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 struct Entity {
     position    : Vector2,
     width       : f32,
@@ -403,22 +409,48 @@ impl Entity {
         }
     }
 
-    fn simulate(&mut self, map: &Map, mut direction: Vector2, dt: f32) {
-        // TODO(erick): Newton
-        direction.normalize_or_zero();
-        direction = direction * (dt * 7.0f32);
+    fn center_in_current_tile_rect(&mut self) {
+        let x_diff = self.width.ceil() - self.width;
+        let y_diff = self.height.ceil() - self.height;
 
-        let entity_rect = Rect2{
+        self.position.x = self.position.x.floor() + x_diff * 0.5;
+        self.position.y = self.position.y.floor() + y_diff * 0.5;
+    }
+
+    fn containing_rect(&self) -> Rect2 {
+        Rect2 {
             x0: self.position.x,
             y0: self.position.y,
 
             x1: self.position.x + self.width,
             y1: self.position.y + self.height,
-        };
+        }
+    }
+
+    fn collision_against_entities(&self, entities: &Vec<Entity>, movement: Vector2) -> isize {
+        let self_rect = self.containing_rect();
+        let target_rect = &self_rect + movement;
+
+        for index in 0..entities.len() {
+            let ref entity = entities[index];
+            let entity_rect = entity.containing_rect();
+
+            if target_rect.collides_with(&entity_rect) {
+                return index as isize;
+            }
+        }
+
+        -1
+    }
+
+    fn collision_against_tiles(&self, map: &Map, mut direction: Vector2) -> Vector2 {
+        let entity_rect = self.containing_rect();
 
         let target_rect = &entity_rect + direction;
 
-        //  TODO(erick): We should probably write an iterator for this operation
+        // TODO(erick): We should probably write an iterator for this operation
+        // TODO(erick): If we know where we are and where we are heading to we don't
+        // need to look at all the tiles
         'outter: for tile_y in 0..map.n_lines() {
             for tile_x in 0..map.n_cols() {
                 let tile_type = map.tile_at(tile_x, tile_y);
@@ -439,7 +471,7 @@ impl Entity {
             }
         }
 
-        self.position += &direction;
+        direction
     }
 
     fn draw(&self, renderer: &mut Renderer) {
@@ -756,7 +788,7 @@ fn main() {
     playing_musics.push(play_music(Path::new("assets/guitar.mp3")));
 
     // Load a font
-    let mut font = ttf_context.load_font(Path::new("assets/font.ttf"), 22).unwrap();
+    let font = ttf_context.load_font(Path::new("assets/font.ttf"), 22).unwrap();
     // font.set_style(sdl2::ttf::STYLE_BOLD);
 
     //
@@ -766,8 +798,8 @@ fn main() {
     let mut joystick_input = GameInputState::new();
 
 
-    let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
-    let map = map.unwrap();
+    let (map, player_position) = Map::from_path(Path::new("assets/maps/0-tutorial.map"), &renderer);
+    let mut map = map.unwrap();
 
     //
     // Player
@@ -777,7 +809,6 @@ fn main() {
     let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
     let player_sprite = Sprite::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h);
 
-    println!("Player position is: {:?}", player_position);
     let player_x = player_position.0 as f32;
     let player_y = player_position.1 as f32;
     let player_width_to_height_ratio = texture_w as f32 / texture_h as f32;
@@ -785,7 +816,7 @@ fn main() {
     let player_width  = player_height * player_width_to_height_ratio;
 
     let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y), player_width, player_height);
-
+    player.center_in_current_tile_rect();
 
     let (running_cat_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/animate.bmp"), &renderer);
     let running_cat_sprite = Sprite::new(Rc::new(running_cat_texture), texture_w, texture_h, 128, 82);
@@ -879,7 +910,22 @@ fn main() {
 
         running_cat.sprite.accumulate_time(dt);
 
-        player.simulate(&map, move_direction, dt);
+        {
+            move_direction.normalize_or_zero();
+            let movement = move_direction * (dt * 7.0f32);
+            let mut allowed_movement = player.collision_against_tiles(&map, movement);
+            if !allowed_movement.is_zero() {
+                let box_index = player.collision_against_entities(&map.boxes, allowed_movement);
+                if box_index != -1 {
+                    let _box = map.boxes[box_index as usize].clone();
+
+                    allowed_movement = _box.collision_against_tiles(&map, allowed_movement);
+                    map.boxes[box_index as usize].position += &allowed_movement;
+                }
+
+                player.position += &allowed_movement;
+            }
+        }
 
         renderer.clear();
         map.draw(&mut renderer);
