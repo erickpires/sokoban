@@ -404,7 +404,7 @@ struct Map {
     boxes: Vec<Entity>
 }
 
-impl<'a> Map {
+impl Map {
     fn is_box(code: u32) -> bool {
         code == 2
     }
@@ -413,7 +413,7 @@ impl<'a> Map {
         code == 3
     }
 
-    fn add_box(map: &'a mut Map, map_data: &'a MapData, _x: u32, _y: u32) {
+    fn add_box(map: & mut Map, map_data: & MapData, _x: u32, _y: u32) {
         // TODO(erick): We probably don't need the unsafe here, but this is language is driving me mad.
         let _sprite = Sprite::new(map_data.box_texture.clone(),
                         map_data.box_texture_width,
@@ -623,13 +623,6 @@ fn main() {
     let mut playing_musics  = Vec::new();
     playing_musics.push(play_music(Path::new("assets/guitar.mp3")));
 
-    //
-    // Player
-    //
-    // TODO(erick): We should allocate sprites on the Heap.
-    let (sprite_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/animate.bmp"), &renderer);
-    let player_sprite = Sprite::new(Rc::new(sprite_texture), texture_w, texture_h, 128, 82);
-    let mut player = Entity::new(player_sprite, Vector2::new(0.5f32, 0.5f32), 4.0, 4.0 * 82.0 / 128.0);
 
     //
     // Input
@@ -640,6 +633,20 @@ fn main() {
     let map_data = MapData::load(&renderer);
     let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &map_data);
     let map = map.unwrap();
+
+    //
+    // Player
+    //
+    // TODO(erick): We should allocate sprites on the Heap.
+
+    let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
+    let player_sprite = Sprite::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h);
+    let mut player = Entity::new(player_sprite, Vector2::new(player_position.0 as f32, player_position.1 as f32), 0.8, 0.8);
+
+
+    let (running_cat_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/animate.bmp"), &renderer);
+    let running_cat_sprite = Sprite::new(Rc::new(running_cat_texture), texture_w, texture_h, 128, 82);
+    let mut running_cat = Entity::new(running_cat_sprite, Vector2::new(16.0, 16.0), 4.0, 4.0 * 82.0 / 128.0);
 
     game_state.is_running = true;
     while game_state.is_running {
@@ -725,11 +732,13 @@ fn main() {
             move_direction.y = joystick_input.left_y_axis;
         }
 
+        running_cat.sprite.accumulate_time(dt);
+
         player.simulate(move_direction, dt);
-        player.sprite.accumulate_time(dt);
 
         renderer.clear();
         map.draw(&mut renderer, &map_data);
+        running_cat.draw(&mut renderer);
         player.draw(&mut renderer);
         renderer.present();
     }
