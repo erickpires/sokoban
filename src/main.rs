@@ -641,7 +641,14 @@ fn main() {
 
     let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
     let player_sprite = Sprite::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h);
-    let mut player = Entity::new(player_sprite, Vector2::new(player_position.0 as f32, player_position.1 as f32), 0.8, 0.8);
+
+    let player_x = player_position.0 as f32;
+    let player_y = player_position.1 as f32;
+    let player_width_to_height_ratio = texture_w as f32 / texture_h as f32;
+    let player_height = 1.0;
+    let player_width  = player_height * player_width_to_height_ratio;
+
+    let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y), player_width, player_height);
 
 
     let (running_cat_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/animate.bmp"), &renderer);
@@ -661,11 +668,11 @@ fn main() {
                         // Axis motion is an absolute value in the range
                         // [-32768, 32767]. Let's simulate a very rough dead
                         // zone to ignore spurious events.
-                        const JOYSTICK_MIN_VALUE : f32 = -32768.0f32;
-                        const JOYSTICK_MAX_VALUE : f32 =  32767.0f32;
+                        const JOYSTICK_MIN_VALUE : f32 = -32768.0;
+                        const JOYSTICK_MAX_VALUE : f32 =  32767.0;
                         const DEAD_ZONE: i16 = 10000;
                         if val <= DEAD_ZONE && val >= -DEAD_ZONE {
-                            *axis = 0.0f32;
+                            *axis = 0.0;
                             return;
                         }
 
@@ -683,13 +690,13 @@ fn main() {
                     if axis == LeftY {
                         // NOTE(erick): The controller coordinates are left-handed
                         handle_axis_input(&mut joystick_input.left_y_axis, val);
-                        joystick_input.left_y_axis *= -1.0f32;
+                        joystick_input.left_y_axis *= -1.0;
                     }if axis == RightX {
                         handle_axis_input(&mut joystick_input.right_y_axis, val);
                     }if axis == RightY {
                         // NOTE(erick): The controller coordinates are left-handed
                         handle_axis_input(&mut joystick_input.right_y_axis, val);
-                        joystick_input.right_y_axis *= -1.0f32;
+                        joystick_input.right_y_axis *= -1.0;
                     }
                 },
                 _ => {}
@@ -699,25 +706,25 @@ fn main() {
         //
         // Keyboard input
         //
-        keyboard_input.left_x_axis = 0.0f32;
-        keyboard_input.left_y_axis = 0.0f32;
+        keyboard_input.left_x_axis = 0.0;
+        keyboard_input.left_y_axis = 0.0;
 
         let keys = pressed_keycode_set(&events);
         if keys.contains(&Keycode::W) {
-            keyboard_input.left_y_axis += 1.0f32;
+            keyboard_input.left_y_axis += 1.0;
         }
         if keys.contains(&Keycode::S) {
-            keyboard_input.left_y_axis -= 1.0f32;
+            keyboard_input.left_y_axis -= 1.0;
         }
         if keys.contains(&Keycode::A) {
-            keyboard_input.left_x_axis -= 1.0f32;
+            keyboard_input.left_x_axis -= 1.0;
         }
         if keys.contains(&Keycode::D) {
-            keyboard_input.left_x_axis += 1.0f32;
+            keyboard_input.left_x_axis += 1.0;
         }
 
         let new_ticks = timer.ticks();
-        let dt = ((new_ticks - game_state.old_ticks) as f32) / 1000.0f32;
+        let dt = ((new_ticks - game_state.old_ticks) as f32) / 1000.0;
         game_state.old_ticks = new_ticks;
 
 
