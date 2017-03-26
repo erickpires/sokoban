@@ -401,7 +401,8 @@ struct Map {
     tiles: Vec<TileType>,
     tiles_stride: i32,
 
-    boxes: Vec<Entity>
+    map_data: MapData,
+    boxes: Vec<Entity>,
 }
 
 impl Map {
@@ -413,13 +414,13 @@ impl Map {
         code == 3
     }
 
-    fn add_box(map: & mut Map, map_data: & MapData, _x: u32, _y: u32) {
+    fn add_box(map: &mut Map, _x: u32, _y: u32) {
         // TODO(erick): We probably don't need the unsafe here, but this is language is driving me mad.
-        let _sprite = Sprite::new(map_data.box_texture.clone(),
-                        map_data.box_texture_width,
-                        map_data.box_texture_height,
-                        map_data.box_texture_width,
-                        map_data.box_texture_height);
+        let _sprite = Sprite::new(map.map_data.box_texture.clone(),
+                        map.map_data.box_texture_width,
+                        map.map_data.box_texture_height,
+                        map.map_data.box_texture_width,
+                        map.map_data.box_texture_height);
 
         let e_box = Entity {
             position : Vector2 {
@@ -438,11 +439,14 @@ impl Map {
         (position.0, n_lines - position.1)
     }
 
-    fn from_path(path: &Path, map_data: &MapData) -> (Result<Map, io::Error>, (i32, i32)) {
+    fn from_path(path: &Path, renderer: &Renderer) -> (Result<Map, io::Error>, (i32, i32)) {
+        let _map_data = MapData::load(&renderer);
+
         let mut result = Map {
             tiles: Vec::new(),
             tiles_stride: -1,
 
+            map_data: _map_data,
             boxes: Vec::new(),
         };
 
@@ -492,7 +496,7 @@ impl Map {
         // Now we add the boxes, converting the coordinate system
         for box_position in boxes_position {
             let (pos_x, pos_y) = Map::from_left_to_right_handed(box_position, n_lines);
-            Map::add_box(&mut result, map_data, pos_x, pos_y);
+            Map::add_box(&mut result, pos_x, pos_y);
         }
 
         if !(player_position.0 < 0 || player_position.1 < 0) {
@@ -548,7 +552,7 @@ impl Map {
         }
     }
 
-    fn draw(&self, renderer: &mut Renderer, map_data: &MapData) {
+    fn draw(&self, renderer: &mut Renderer) {
         // TODO(erick): Should the camera move?
         const CAMERA_Y0     : u32 = 0;
         const CAMERA_X0     : u32 = 0;
@@ -568,7 +572,7 @@ impl Map {
                 if tile_x >= CAMERA_WIDTH { break; }
 
                 let tile = self.tile_at(tile_x, tile_y);
-                Map::draw_tile(tile, tile_x, tile_y, tile_width_in_camera, tile_height_in_camera, map_data, renderer);
+                Map::draw_tile(tile, tile_x, tile_y, tile_width_in_camera, tile_height_in_camera, &self.map_data, renderer);
             }
         }
 
@@ -630,15 +634,15 @@ fn main() {
     let mut keyboard_input = GameInputState::new();
     let mut joystick_input = GameInputState::new();
 
-    let map_data = MapData::load(&renderer);
-    let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &map_data);
+
+    let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
     let map = map.unwrap();
 
     //
     // Player
     //
-    // TODO(erick): We should allocate sprites on the Heap.
-
+    // TODO(erick): Since we now use a Rc to store the sprite texture we
+    // don't need to hold the texture here anymore. This two lines can be handled by a single function
     let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
     let player_sprite = Sprite::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h);
 
@@ -744,7 +748,7 @@ fn main() {
         player.simulate(move_direction, dt);
 
         renderer.clear();
-        map.draw(&mut renderer, &map_data);
+        map.draw(&mut renderer);
         running_cat.draw(&mut renderer);
         player.draw(&mut renderer);
         renderer.present();
