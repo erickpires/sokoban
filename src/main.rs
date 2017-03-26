@@ -30,7 +30,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::fs::File;
 
-
+use std::ops::Add;
 use std::ops::Mul;
 use std::ops::AddAssign;
 
@@ -74,6 +74,8 @@ impl Vector2 {
 #[derive(Clone)]
 #[derive(Copy)]
 struct Rect2 {
+    // NOTE(erick): (x0, y0) is always the left-bottom point
+    // and (x1, y1) is always the right-top point.
     x0: f32,
     y0: f32,
 
@@ -90,6 +92,74 @@ impl Rect2 {
             x1: point.x + width,
             y1: point.y + height,
         }
+    }
+
+    // TODO(erick): It would be nice if we had some unit-test for this thing.
+    fn collides_with(&self, other: &Rect2) -> bool {
+        if self.x1 >= other.x0 && self.x1 <= other.x0 {
+            if self.y1 < other.y0 {
+                return false;
+            }
+            if self.y0 > other.y1 {
+                return false;
+            }
+
+            return true;
+        }
+        if self.x0 <= other.x1 && self.x1 >= other.x0 {
+            if self.y1 < other.y0 {
+                return false;
+            }
+            if self.y0 > other.y1 {
+                return false;
+            }
+            return true;
+        }
+        if self.y1 >= other.y0 && self.y1 <= other.y0 {
+            if self.x1 < other.x0 {
+                return false;
+            }
+            if self.x0 > other.x1 {
+                return false;
+            }
+
+            return true;
+        }
+        if self.y0 <= other.y1 && self.y1 >= other.y0 {
+            if self.x1 < other.x0 {
+                return false;
+            }
+            if self.x0 > other.x1 {
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+}
+
+impl<'a> Add<Vector2> for &'a Rect2 {
+    type Output = Rect2;
+
+    fn add(self, translation: Vector2) -> Rect2 {
+        Rect2 {
+            x0: self.x0 + translation.x,
+            y0: self.y0 + translation.y,
+
+            x1: self.x1 + translation.x,
+            y1: self.y1 + translation.y,
+        }
+    }
+}
+
+fn allowed_motion_before_collision(moving: &Rect2, direction: Vector2, obstacle: &Rect2) -> f32 {
+    // TODO(erick): We should binary search and find the correct movement amount.
+    if moving.collides_with(obstacle) {
+        0.0
+    } else {
+        1.0
     }
 }
 
@@ -333,11 +403,41 @@ impl Entity {
         }
     }
 
-    fn simulate(&mut self, mut direction: Vector2, dt: f32) {
+    fn simulate(&mut self, map: &Map, mut direction: Vector2, dt: f32) {
         // TODO(erick): Newton
         direction.normalize_or_zero();
+        direction = direction * (dt * 7.0f32);
 
-        direction = direction * (dt * 2.0f32);
+        let entity_rect = Rect2{
+            x0: self.position.x,
+            y0: self.position.y,
+
+            x1: self.position.x + self.width,
+            y1: self.position.y + self.height,
+        };
+
+        let target_rect = &entity_rect + direction;
+
+        //  TODO(erick): We should probably write an iterator for this operation
+        'outter: for tile_y in 0..map.n_lines() {
+            for tile_x in 0..map.n_cols() {
+                let tile_type = map.tile_at(tile_x, tile_y);
+                if let TileType::Wall = tile_type {
+                    let tile_rect = Rect2 {
+                        x0: tile_x as f32,
+                        y0: tile_y as f32,
+
+                        x1: 1.0 + tile_x as f32,
+                        y1: 1.0 + tile_y as f32,
+                    };
+
+                    if target_rect.collides_with(&tile_rect) {
+                        direction = Vector2::zero();
+                        break 'outter;
+                    }
+                }
+            }
+        }
 
         self.position += &direction;
     }
@@ -354,7 +454,7 @@ impl Entity {
         let y_camera_coord = self.position.y - CAMERA_Y0 as f32;
 
         let x_screen_coord = (x_camera_coord * (WINDOW_WIDTH / CAMERA_WIDTH) as f32) as i32;
-        let y_screen_coord = WINDOW_HEIGHT as i32 - ( y_camera_coord * (WINDOW_HEIGHT / CAMERA_HEIGHT) as f32) as i32;
+        let y_screen_coord = WINDOW_HEIGHT as i32 - ( (y_camera_coord + self.height) * (WINDOW_HEIGHT / CAMERA_HEIGHT) as f32) as i32;
 
         let w_screen_coord = (self.width * (WINDOW_WIDTH / CAMERA_WIDTH) as f32) as u32;
         let h_screen_coord = (self.height * (WINDOW_HEIGHT / CAMERA_HEIGHT) as f32) as u32;
@@ -463,7 +563,7 @@ impl Map {
     }
 
     fn from_left_to_right_handed(position : (u32, u32), n_lines: u32) -> (u32, u32) {
-        (position.0, n_lines - position.1)
+        (position.0, n_lines - position.1 - 1)
     }
 
     fn from_path(path: &Path, renderer: &Renderer) -> (Result<Map, io::Error>, (i32, i32)) {
@@ -506,7 +606,7 @@ impl Map {
                     boxes_position.push((n_tiles - 1, n_lines - 1));
                 } else if Map::is_player(code) {
                     // README(erick): These numbers are off-by-one
-                    player_position = ((n_lines - 1) as i32, (n_tiles - 1) as i32);
+                    player_position = ((n_tiles - 1) as i32, (n_lines - 1) as i32);
                 }
             }
 
@@ -677,10 +777,11 @@ fn main() {
     let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
     let player_sprite = Sprite::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h);
 
+    println!("Player position is: {:?}", player_position);
     let player_x = player_position.0 as f32;
     let player_y = player_position.1 as f32;
     let player_width_to_height_ratio = texture_w as f32 / texture_h as f32;
-    let player_height = 1.0;
+    let player_height = 0.8;
     let player_width  = player_height * player_width_to_height_ratio;
 
     let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y), player_width, player_height);
@@ -778,7 +879,7 @@ fn main() {
 
         running_cat.sprite.accumulate_time(dt);
 
-        player.simulate(move_direction, dt);
+        player.simulate(&map, move_direction, dt);
 
         renderer.clear();
         map.draw(&mut renderer);
