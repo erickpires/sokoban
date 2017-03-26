@@ -8,6 +8,10 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::rect::Rect;
 
+use sdl2::ttf::Font;
+use sdl2::pixels::Color;
+use sdl2::render::TextureQuery;
+
 use sdl2::mixer::{INIT_MP3, INIT_FLAC, INIT_MOD, INIT_FLUIDSYNTH, INIT_MODPLUG, INIT_OGG,
                  AUDIO_S16LSB};
 use sdl2::mixer::Music;
@@ -62,6 +66,29 @@ impl Vector2 {
             self.y /= denom;
         } else {
             // if denom is zero the vector is already zero.
+        }
+    }
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+#[derive(Copy)]
+struct Rect2 {
+    x0: f32,
+    y0: f32,
+
+    x1: f32,
+    y1: f32,
+}
+
+impl Rect2 {
+    fn from_point_and_dimensions(point: Vector2, width: f32, height: f32) -> Rect2 {
+        Rect2 {
+            x0: point.x,
+            y0: point.y,
+
+            x1: point.x + width,
+            y1: point.y + height,
         }
     }
 }
@@ -595,6 +622,7 @@ fn main() {
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+    let ttf_context = sdl2::ttf::init().unwrap();
 
     let window = video_subsystem.window(GAME_NAME, WINDOW_WIDTH, WINDOW_HEIGHT)
         .resizable()
@@ -627,6 +655,9 @@ fn main() {
     let mut playing_musics  = Vec::new();
     playing_musics.push(play_music(Path::new("assets/guitar.mp3")));
 
+    // Load a font
+    let mut font = ttf_context.load_font(Path::new("assets/font.ttf"), 22).unwrap();
+    // font.set_style(sdl2::ttf::STYLE_BOLD);
 
     //
     // Input
@@ -743,6 +774,8 @@ fn main() {
             move_direction.y = joystick_input.left_y_axis;
         }
 
+        let fps_text = format!("Frame time: {:.3}", dt);
+
         running_cat.sprite.accumulate_time(dt);
 
         player.simulate(move_direction, dt);
@@ -751,8 +784,30 @@ fn main() {
         map.draw(&mut renderer);
         running_cat.draw(&mut renderer);
         player.draw(&mut renderer);
+
+        draw_text(&mut renderer, &font, Color::RGBA(255, 0, 0, 255), &fps_text, Vector2::new(0.02, 0.02));
+
+
         renderer.present();
+
+        // use std::time::Duration;
+        // std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+fn draw_text(renderer: &mut Renderer, font: &Font, color: Color, string: &String, position: Vector2) {
+    let text_surface = font.render(string)
+        .blended(color).unwrap();
+    let mut text_texture = renderer.create_texture_from_surface(&text_surface).unwrap();
+
+    let text_x = (WINDOW_WIDTH as f32 * position.x) as i32;
+    let text_y = (WINDOW_HEIGHT as f32 * position.y) as i32;
+
+
+    let TextureQuery { width: text_width, height: text_height, .. } = text_texture.query();
+    let text_rect = Rect::new(text_x, text_y, text_width, text_height);
+
+    renderer.copy(&mut text_texture, None, Some(text_rect)).unwrap();
 }
 
 fn pressed_keycode_set(e: &sdl2::EventPump) -> HashSet<Keycode> {
