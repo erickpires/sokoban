@@ -330,60 +330,118 @@ impl GameInputState {
     }
 }
 
-#[allow(dead_code)]
+#[derive(Debug)]
 #[derive(Clone)]
-struct Sprite {
-    height : u32,
-    width  : u32,
-
-    texture_x : i32,
-    texture_y : i32,
-    texture_width  : u32,
-    texture_height : u32,
-
-    texture :  Rc<Texture>,
-    is_animating: bool,
-
-    // TODO(erick): This should not be here. We need an AnimationPlayer
-    acc_dt      : f32,
-    fps         : u32,
-    frame_time  : f32,
+struct AnimationLane {
+    number_of_frames        : u32,
 }
 
-impl Sprite {
-    fn new(_texture: Rc<Texture>, texture_w: u32, texture_h: u32, w: u32, h: u32) -> Sprite {
+#[derive(Debug)]
+#[derive(Clone)]
+struct AnimationInfo {
+    is_animating    : bool,
+
+    acc_dt          : f32,
+    fps             : u32,
+    frame_time      : f32,
+
+    current_frame   : u32,
+    animation_lanes : Vec<AnimationLane>,
+    // TODO(erick): We should either find out a way to disable bound checks or
+    // see if we can use a reference here.
+    current_animation_lane_index : isize,
+}
+
+impl AnimationInfo {
+    fn new(animating: bool, _fps: u32) -> AnimationInfo {
+        let _frame_time = if _fps > 0 {1.0 / _fps as f32} else {0.0};
+
+        AnimationInfo {
+            is_animating    : animating,
+
+            acc_dt          : 0.0,
+            fps             : _fps,
+            frame_time      : _frame_time,
+
+            current_frame   : 0,
+            animation_lanes : Vec::new(),
+            current_animation_lane_index : -1,
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+struct SpriteSheet {
+    sprite_height : u32,
+    sprite_width  : u32,
+
+    sprite_x_offset : i32,
+    sprite_y_offset : i32,
+    sprite_sheet_width  : u32,
+    sprite_sheet_height : u32,
+
+    texture :  Rc<Texture>,
+
+    animation_info : AnimationInfo,
+}
+
+impl SpriteSheet {
+    fn new(_texture: Rc<Texture>, sprite_sheet_w: u32, sprite_sheet_h: u32,
+            w: u32, h: u32, _animation_info: AnimationInfo) -> SpriteSheet {
+        // TODO(erick): We are not checking whether the sprite sheet dimensions are
+        // multiples of the sprite dimensions.
         let _fps = 16;
 
+        SpriteSheet {
+            sprite_height : h,
+            sprite_width  : w,
 
-        Sprite {
-            height : h,
-            width  : w,
-
-            texture_x : 0,
-            texture_y : 0,
-            texture_width  : texture_w,
-            texture_height : texture_h,
+            sprite_x_offset : 0,
+            sprite_y_offset : 0,
+            sprite_sheet_width   : sprite_sheet_w,
+            sprite_sheet_height  : sprite_sheet_h,
 
             texture : _texture,
-            is_animating : false,
 
-            acc_dt      : 0.0f32,
-            fps         : _fps,
-            frame_time  : 1.0f32 / (_fps) as f32,
+            animation_info : _animation_info,
         }
     }
 
-    fn accumulate_time(&mut self, dt: f32) {
-        self.acc_dt += dt;
+    fn animation_accumulate_dt(&mut self, dt: f32) {
+        //
+        // Early-outs
+        //
+        if !self.animation_info.is_animating {
+            return;
+        }
 
-        while self.acc_dt >= self.frame_time {
-            self.acc_dt -= self.frame_time;
-            self.texture_x += self.width as i32;
+        if self.animation_info.current_animation_lane_index == -1 {
+            return;
+        }
 
-            // TODO(erick): Hard-coded
-            if self.texture_x >= (self.texture_width) as i32 {
-                self.texture_x = 0;
+        self.animation_info.acc_dt += dt;
+
+        if self.animation_info.acc_dt < self.animation_info.frame_time {
+            return
+        }
+
+        let ref current_lane = self.animation_info.animation_lanes[self.animation_info.current_animation_lane_index as usize];
+        while self.animation_info.acc_dt >= self.animation_info.frame_time {
+            self.animation_info.acc_dt -= self.animation_info.frame_time;
+
+            self.animation_info.current_frame += 1;
+            if self.animation_info.current_frame >= current_lane.number_of_frames {
+                self.animation_info.current_frame = 0;
             }
+        }
+        self.sprite_x_offset = (self.sprite_width * self.animation_info.current_frame) as i32;
+    }
+
+    fn set_animation_lane_index(&mut self, index: usize) {
+        if index >= 0 && index < self.animation_info.animation_lanes.len() {
+            self.animation_info.current_animation_lane_index = index as isize;
+            self.sprite_y_offset = (self.sprite_height * index as u32) as i32;
         }
     }
 }
@@ -395,17 +453,17 @@ struct Entity {
     width       : f32,
     height      : f32,
 
-    sprite : Sprite,
+    sprite_sheet : SpriteSheet,
 }
 
 impl Entity {
-    fn new(s: Sprite, p0: Vector2, w: f32, h: f32) -> Entity {
+    fn new(s: SpriteSheet, p0: Vector2, w: f32, h: f32) -> Entity {
         Entity{
             position    : p0,
             width       : w,
             height      : h,
 
-            sprite : s,
+            sprite_sheet : s,
         }
     }
 
@@ -485,10 +543,10 @@ impl Entity {
         let w_screen_coord = (self.width * (WINDOW_WIDTH / CAMERA_WIDTH) as f32) as u32;
         let h_screen_coord = (self.height * (WINDOW_HEIGHT / CAMERA_HEIGHT) as f32) as u32;
 
-
-        let source_rect = Rect::new(self.sprite.texture_x, self.sprite.texture_y, self.sprite.width, self.sprite.height);
+        let source_rect = Rect::new(self.sprite_sheet.sprite_x_offset, self.sprite_sheet.sprite_y_offset,
+                                    self.sprite_sheet.sprite_width, self.sprite_sheet.sprite_height);
         let dest_rect = Rect::new(x_screen_coord, y_screen_coord, w_screen_coord, h_screen_coord);
-        renderer.copy_ex(&self.sprite.texture, Some(source_rect), Some(dest_rect), 0.0, None, true, false).unwrap();
+        renderer.copy_ex(&self.sprite_sheet.texture, Some(source_rect), Some(dest_rect), 0.0, None, true, false).unwrap();
     }
 }
 
@@ -570,12 +628,14 @@ impl Map {
     }
 
     fn add_box(map: &mut Map, _x: u32, _y: u32) {
-        // TODO(erick): We probably don't need the unsafe here, but this is language is driving me mad.
-        let _sprite = Sprite::new(map.map_data.box_texture.clone(),
+        let boxes_anim_info = AnimationInfo::new(false, 0);
+
+        let _sprite = SpriteSheet::new(map.map_data.box_texture.clone(),
                         map.map_data.box_texture_width,
                         map.map_data.box_texture_height,
                         map.map_data.box_texture_width,
-                        map.map_data.box_texture_height);
+                        map.map_data.box_texture_height,
+                        boxes_anim_info);
 
         let e_box = Entity {
             position : Vector2 {
@@ -585,7 +645,7 @@ impl Map {
             height  : 1.0,
             width   : 1.0,
 
-            sprite: _sprite,
+            sprite_sheet    : _sprite,
         };
         map.boxes.push(e_box);
     }
@@ -794,7 +854,7 @@ fn main() {
     let mut joystick_input = GameInputState::new();
 
 
-    let (map, player_position) = Map::from_path(Path::new("assets/maps/0-tutorial.map"), &renderer);
+    let (map, player_position) = Map::from_path(Path::new("assets/maps/1-starting.map"), &renderer);
     let mut map = map.unwrap();
 
     //
@@ -802,8 +862,10 @@ fn main() {
     //
     // TODO(erick): Since we now use a Rc to store the sprite texture we
     // don't need to hold the texture here anymore. This two lines can be handled by a single function
+    let player_anim_info = AnimationInfo::new(false, 0);
+
     let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
-    let player_sprite = Sprite::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h);
+    let player_sprite = SpriteSheet::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h, player_anim_info);
 
     let player_x = player_position.0 as f32;
     let player_y = player_position.1 as f32;
@@ -814,8 +876,12 @@ fn main() {
     let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y), player_width, player_height);
     player.center_on_current_tile_rect();
 
+
+    let mut cat_anim_info = AnimationInfo::new(true, 12);
+    cat_anim_info.animation_lanes.push(AnimationLane{number_of_frames: 6});
+    cat_anim_info.current_animation_lane_index = 0;
     let (running_cat_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/animate.bmp"), &renderer);
-    let running_cat_sprite = Sprite::new(Rc::new(running_cat_texture), texture_w, texture_h, 128, 82);
+    let running_cat_sprite = SpriteSheet::new(Rc::new(running_cat_texture), texture_w, texture_h, 128, 82, cat_anim_info);
     let mut running_cat = Entity::new(running_cat_sprite, Vector2::new(16.0, 13.5), 4.0, 4.0 * 82.0 / 128.0);
 
     game_state.is_running = true;
@@ -914,6 +980,8 @@ fn main() {
 
         // HACK(erick): We are moving the player (and the boxes) here.
         // This code need to be generalized, but I don't know to to generalize it yet.
+        // TODO(erick): Entity-vs-entity collision when the second entity is not movable
+        // is not handled yet.
         {
             move_direction.normalize_or_zero();
             if !move_direction.is_zero() {
@@ -956,7 +1024,7 @@ fn main() {
 
         let fps_text = format!("Frame time: {:.3}", dt);
 
-        running_cat.sprite.accumulate_time(dt);
+        running_cat.sprite_sheet.animation_accumulate_dt(dt);
 
         renderer.clear();
         map.draw(&mut renderer);
