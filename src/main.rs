@@ -409,7 +409,7 @@ impl Entity {
         }
     }
 
-    fn center_in_current_tile_rect(&mut self) {
+    fn center_on_current_tile_rect(&mut self) {
         let x_diff = self.width.ceil() - self.width;
         let y_diff = self.height.ceil() - self.height;
 
@@ -418,13 +418,7 @@ impl Entity {
     }
 
     fn containing_rect(&self) -> Rect2 {
-        Rect2 {
-            x0: self.position.x,
-            y0: self.position.y,
-
-            x1: self.position.x + self.width,
-            y1: self.position.y + self.height,
-        }
+        Rect2::from_point_and_dimensions(self.position, self.width, self.height)
     }
 
     fn collision_against_entities(&self, entities: &Vec<Entity>, movement: Vector2) -> isize {
@@ -556,6 +550,8 @@ impl MapData {
     }
 }
 
+// TODO(erick): Tiles and box should be in separated structs, otherwise we can't borrow a mutable box
+// and an immutable map. CHECK FIRST!!!!
 struct Map {
     tiles: Vec<TileType>,
     tiles_stride: i32,
@@ -816,11 +812,11 @@ fn main() {
     let player_width  = player_height * player_width_to_height_ratio;
 
     let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y), player_width, player_height);
-    player.center_in_current_tile_rect();
+    player.center_on_current_tile_rect();
 
     let (running_cat_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/animate.bmp"), &renderer);
     let running_cat_sprite = Sprite::new(Rc::new(running_cat_texture), texture_w, texture_h, 128, 82);
-    let mut running_cat = Entity::new(running_cat_sprite, Vector2::new(16.0, 16.0), 4.0, 4.0 * 82.0 / 128.0);
+    let mut running_cat = Entity::new(running_cat_sprite, Vector2::new(16.0, 13.5), 4.0, 4.0 * 82.0 / 128.0);
 
     game_state.is_running = true;
     while game_state.is_running {
@@ -898,6 +894,7 @@ fn main() {
         let mut move_direction = Vector2::zero();
         // NOTE(erick): We only read the keyboard when there is no input on the joystick
         // TODO(erick): We should check if the joystick is still connected.
+
         if joystick_input.no_left_axis_input() {
             move_direction.x = keyboard_input.left_x_axis;
             move_direction.y = keyboard_input.left_y_axis;
@@ -906,31 +903,65 @@ fn main() {
             move_direction.y = joystick_input.left_y_axis;
         }
 
+        // {
+        //     // HACK(erick): The controller input should be handed properly
+        //     if move_direction.y.abs() > move_direction.x.abs() {
+        //         move_direction.x = 0.0
+        //     } else {
+        //         move_direction.y = 0.0
+        //     }
+        // }
+
+        // HACK(erick): We are moving the player (and the boxes) here.
+        // This code need to be generalized, but I don't know to to generalize it yet.
+        {
+            move_direction.normalize_or_zero();
+            if !move_direction.is_zero() {
+                let movement = move_direction * (dt * 7.0f32);
+                let mut allowed_movement = player.collision_against_tiles(&map, movement);
+                if !allowed_movement.is_zero() {
+                    let box_index = player.collision_against_entities(&map.boxes, allowed_movement);
+                    if box_index != -1 {
+                        let _box = map.boxes[box_index as usize].clone();
+
+                        allowed_movement = _box.collision_against_tiles(&map, allowed_movement);
+                        map.boxes[box_index as usize].position += &allowed_movement;
+                    }
+
+                    player.position += &allowed_movement;
+                }
+            } else {
+                // player.center_on_current_tile_rect();
+            }
+        }
+
+
+        {
+            let mut end_game = true;
+            for _box in & map.boxes {
+                let box_tile = map.tile_at(_box.position.x as u32, _box.position.y as u32);
+                if let TileType::Target = box_tile {
+
+                } else {
+                    end_game = false;
+                    break;
+                }
+            }
+
+            if end_game {
+                game_state.is_running = false;
+            }
+        }
+
+
         let fps_text = format!("Frame time: {:.3}", dt);
 
         running_cat.sprite.accumulate_time(dt);
 
-        {
-            move_direction.normalize_or_zero();
-            let movement = move_direction * (dt * 7.0f32);
-            let mut allowed_movement = player.collision_against_tiles(&map, movement);
-            if !allowed_movement.is_zero() {
-                let box_index = player.collision_against_entities(&map.boxes, allowed_movement);
-                if box_index != -1 {
-                    let _box = map.boxes[box_index as usize].clone();
-
-                    allowed_movement = _box.collision_against_tiles(&map, allowed_movement);
-                    map.boxes[box_index as usize].position += &allowed_movement;
-                }
-
-                player.position += &allowed_movement;
-            }
-        }
-
         renderer.clear();
         map.draw(&mut renderer);
-        running_cat.draw(&mut renderer);
         player.draw(&mut renderer);
+        running_cat.draw(&mut renderer);
 
         draw_text(&mut renderer, &font, Color::RGBA(255, 0, 0, 255), &fps_text, Vector2::new(0.02, 0.02));
 
@@ -938,7 +969,7 @@ fn main() {
         renderer.present();
 
         // use std::time::Duration;
-        // std::thread::sleep(Duration::from_millis(10));
+        // std::thread::sleep(Duration::from_millis(100));
     }
 }
 
