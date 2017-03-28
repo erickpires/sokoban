@@ -101,40 +101,40 @@ impl Rect2 {
 
     // TODO(erick): It would be nice if we had some unit-test for this thing.
     fn collides_with(&self, other: &Rect2) -> bool {
-        if self.x1 >= other.x0 && self.x1 <= other.x0 {
-            if self.y1 < other.y0 {
+        if self.x1 > other.x0 && self.x1 < other.x0 {
+            if self.y1 <= other.y0 {
                 return false;
             }
-            if self.y0 > other.y1 {
-                return false;
-            }
-
-            return true;
-        }
-        if self.x0 <= other.x1 && self.x1 >= other.x0 {
-            if self.y1 < other.y0 {
-                return false;
-            }
-            if self.y0 > other.y1 {
-                return false;
-            }
-            return true;
-        }
-        if self.y1 >= other.y0 && self.y1 <= other.y0 {
-            if self.x1 < other.x0 {
-                return false;
-            }
-            if self.x0 > other.x1 {
+            if self.y0 >= other.y1 {
                 return false;
             }
 
             return true;
         }
-        if self.y0 <= other.y1 && self.y1 >= other.y0 {
-            if self.x1 < other.x0 {
+        if self.x0 < other.x1 && self.x1 > other.x0 {
+            if self.y1 <= other.y0 {
                 return false;
             }
-            if self.x0 > other.x1 {
+            if self.y0 >= other.y1 {
+                return false;
+            }
+            return true;
+        }
+        if self.y1 > other.y0 && self.y1 < other.y0 {
+            if self.x1 <= other.x0 {
+                return false;
+            }
+            if self.x0 >= other.x1 {
+                return false;
+            }
+
+            return true;
+        }
+        if self.y0 < other.y1 && self.y1 > other.y0 {
+            if self.x1 <= other.x0 {
+                return false;
+            }
+            if self.x0 >= other.x1 {
                 return false;
             }
 
@@ -854,16 +854,15 @@ fn main() {
     let mut joystick_input = GameInputState::new();
 
 
-    let (map, player_position) = Map::from_path(Path::new("assets/maps/1-starting.map"), &renderer);
+    let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
     let mut map = map.unwrap();
 
     //
     // Player
     //
+    let player_anim_info = AnimationInfo::new(false, 0);
     // TODO(erick): Since we now use a Rc to store the sprite texture we
     // don't need to hold the texture here anymore. This two lines can be handled by a single function
-    let player_anim_info = AnimationInfo::new(false, 0);
-
     let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
     let player_sprite = SpriteSheet::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h, player_anim_info);
 
