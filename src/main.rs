@@ -13,7 +13,7 @@ use sdl2::pixels::Color;
 use sdl2::render::TextureQuery;
 
 use sdl2::mixer::{INIT_MP3, INIT_FLAC, INIT_MOD, INIT_FLUIDSYNTH, INIT_MODPLUG, INIT_OGG,
-                 AUDIO_S16LSB};
+                    AUDIO_S16LSB};
 use sdl2::mixer::Music;
 use sdl2::Sdl;
 
@@ -439,7 +439,7 @@ impl SpriteSheet {
     }
 
     fn set_animation_lane_index(&mut self, index: usize) {
-        if index >= 0 && index < self.animation_info.animation_lanes.len() {
+        if index < self.animation_info.animation_lanes.len() {
             self.animation_info.current_animation_lane_index = index as isize;
             self.sprite_y_offset = (self.sprite_height * index as u32) as i32;
         }
@@ -450,33 +450,39 @@ impl SpriteSheet {
 #[derive(Clone)]
 struct Entity {
     position    : Vector2,
-    width       : f32,
-    height      : f32,
+    draw_height         : f32,
+    draw_width          : f32,
+
+    collision_width     : f32,
+    collision_height    : f32,
 
     sprite_sheet : SpriteSheet,
 }
 
 impl Entity {
-    fn new(s: SpriteSheet, p0: Vector2, w: f32, h: f32) -> Entity {
+    fn new(s: SpriteSheet, p0: Vector2, collision_w: f32, collision_h: f32, draw_w: f32, draw_h: f32) -> Entity {
         Entity{
             position    : p0,
-            width       : w,
-            height      : h,
+            draw_height         : draw_h,
+            draw_width          : draw_w,
+
+            collision_width     : collision_w,
+            collision_height    : collision_h,
 
             sprite_sheet : s,
         }
     }
 
     fn center_on_current_tile_rect(&mut self) {
-        let x_diff = self.width.ceil() - self.width;
-        let y_diff = self.height.ceil() - self.height;
+        let x_diff = self.draw_width.ceil() - self.draw_width;
+        let y_diff = self.draw_height.ceil() - self.draw_height;
 
         self.position.x = self.position.x.floor() + x_diff * 0.5;
         self.position.y = self.position.y.floor() + y_diff * 0.5;
     }
 
     fn containing_rect(&self) -> Rect2 {
-        Rect2::from_point_and_dimensions(self.position, self.width, self.height)
+        Rect2::from_point_and_dimensions(self.position, self.collision_width, self.collision_height)
     }
 
     fn collision_against_entities(&self, entities: &Vec<Entity>, movement: Vector2) -> isize {
@@ -538,15 +544,15 @@ impl Entity {
         let y_camera_coord = self.position.y - CAMERA_Y0 as f32;
 
         let x_screen_coord = (x_camera_coord * (WINDOW_WIDTH / CAMERA_WIDTH) as f32) as i32;
-        let y_screen_coord = WINDOW_HEIGHT as i32 - ( (y_camera_coord + self.height) * (WINDOW_HEIGHT / CAMERA_HEIGHT) as f32) as i32;
+        let y_screen_coord = WINDOW_HEIGHT as i32 - ( (y_camera_coord + self.draw_height) * (WINDOW_HEIGHT / CAMERA_HEIGHT) as f32) as i32;
 
-        let w_screen_coord = (self.width * (WINDOW_WIDTH / CAMERA_WIDTH) as f32) as u32;
-        let h_screen_coord = (self.height * (WINDOW_HEIGHT / CAMERA_HEIGHT) as f32) as u32;
+        let w_screen_coord = (self.draw_width * (WINDOW_WIDTH / CAMERA_WIDTH) as f32) as u32;
+        let h_screen_coord = (self.draw_height * (WINDOW_HEIGHT / CAMERA_HEIGHT) as f32) as u32;
 
         let source_rect = Rect::new(self.sprite_sheet.sprite_x_offset, self.sprite_sheet.sprite_y_offset,
                                     self.sprite_sheet.sprite_width, self.sprite_sheet.sprite_height);
         let dest_rect = Rect::new(x_screen_coord, y_screen_coord, w_screen_coord, h_screen_coord);
-        renderer.copy_ex(&self.sprite_sheet.texture, Some(source_rect), Some(dest_rect), 0.0, None, true, false).unwrap();
+        renderer.copy_ex(&self.sprite_sheet.texture, Some(source_rect), Some(dest_rect), 0.0, None, false, false).unwrap();
     }
 }
 
@@ -642,8 +648,10 @@ impl Map {
                 x: _x as f32,
                 y: _y as f32,
             },
-            height  : 1.0,
-            width   : 1.0,
+            draw_width          : 1.0,
+            draw_height         : 1.0,
+            collision_width     : 1.0,
+            collision_height    : 1.0,
 
             sprite_sheet    : _sprite,
         };
@@ -763,7 +771,7 @@ impl Map {
 
             let source_rect = Rect::new(0, 0, map_data.tile_texture_width, map_data.tile_texture_height);
             let dest_rect = Rect::new(tile_x_screen_coord, tile_y_screen_coord, width, height);
-            renderer.copy_ex(tile_texture, Some(source_rect), Some(dest_rect), 0.0, None, true, false).unwrap();
+            renderer.copy_ex(tile_texture, Some(source_rect), Some(dest_rect), 0.0, None, false, false).unwrap();
         }
     }
 
@@ -869,19 +877,28 @@ fn main() {
     let player_x = player_position.0 as f32;
     let player_y = player_position.1 as f32;
     let player_width_to_height_ratio = texture_w as f32 / texture_h as f32;
-    let player_height = 0.8;
-    let player_width  = player_height * player_width_to_height_ratio;
 
-    let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y), player_width, player_height);
+    let player_collision_height = 0.8;
+    let player_colliion_width  = player_collision_height * player_width_to_height_ratio;
+
+    let player_draw_height = 1.2;
+    let player_draw_width = player_draw_height * player_width_to_height_ratio;
+
+    let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y),
+                        player_colliion_width, player_collision_height,
+                        player_draw_width, player_draw_height);
     player.center_on_current_tile_rect();
 
 
     let mut cat_anim_info = AnimationInfo::new(true, 12);
     cat_anim_info.animation_lanes.push(AnimationLane{number_of_frames: 6});
-    cat_anim_info.current_animation_lane_index = 0;
+    cat_anim_info.animation_lanes.push(AnimationLane{number_of_frames: 6});
     let (running_cat_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/animate.bmp"), &renderer);
-    let running_cat_sprite = SpriteSheet::new(Rc::new(running_cat_texture), texture_w, texture_h, 128, 82, cat_anim_info);
-    let mut running_cat = Entity::new(running_cat_sprite, Vector2::new(16.0, 13.5), 4.0, 4.0 * 82.0 / 128.0);
+    let mut running_cat_sprite = SpriteSheet::new(Rc::new(running_cat_texture), texture_w, texture_h, 128, 82, cat_anim_info);
+    running_cat_sprite.set_animation_lane_index(1);
+    let running_cat_width = 4.0;
+    let running_cat_height = running_cat_width * 82.0 / 128.0;
+    let mut running_cat = Entity::new(running_cat_sprite, Vector2::new(16.0, 13.5), running_cat_width, running_cat_height, running_cat_width, running_cat_height);
 
     game_state.is_running = true;
     while game_state.is_running {
