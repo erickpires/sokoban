@@ -1,5 +1,6 @@
 extern crate sdl2;
 extern crate gl;
+extern crate regex;
 
 use sdl2::render::Texture;
 use sdl2::render::Renderer;
@@ -33,6 +34,9 @@ use std::fs::File;
 use std::ops::Add;
 use std::ops::Mul;
 use std::ops::AddAssign;
+
+use regex::Regex;
+use regex::Captures;
 
 
 #[derive(Debug)]
@@ -862,6 +866,7 @@ fn main() {
     let mut joystick_input = GameInputState::new();
 
 
+    parse_level(Path::new("assets/maps/0-tutorial.lvl"));
     let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
     let mut map = map.unwrap();
 
@@ -878,11 +883,11 @@ fn main() {
     let player_y = player_position.1 as f32;
     let player_width_to_height_ratio = texture_w as f32 / texture_h as f32;
 
-    let player_collision_height = 0.8;
-    let player_colliion_width  = player_collision_height * player_width_to_height_ratio;
-
     let player_draw_height = 1.2;
     let player_draw_width = player_draw_height * player_width_to_height_ratio;
+
+    let player_collision_height = 0.8;
+    let player_colliion_width  = player_draw_width;
 
     let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y),
                         player_colliion_width, player_collision_height,
@@ -1057,6 +1062,160 @@ fn main() {
     }
 }
 
+fn parse_level(level_file_path: &Path) {
+
+    let mut _level_name = None;
+    let mut _level_music = None;
+    let mut _next_level = None;
+    let mut _wall_tile = None;
+    let mut _floor_tile = None;
+    let mut _target_tile = None;
+    let mut _tile_map = None;
+    let mut _player_position = None;
+    let mut _box_sprite_sheet = None;
+    let mut _box_sprite_sheet_width = None;
+    let mut _box_sprite_sheet_height = None;
+    let mut _box_positions = None;
+
+    let level_file = match File::open(level_file_path) {
+        Ok(file)    => file,
+        Err(_)      => {return}
+    };
+
+    let level_data = BufReader::new(&level_file);
+
+    let mut line_number = 0;
+    for line in level_data.lines() {
+        line_number += 1;
+
+        let line = line.unwrap();
+        if line == "" {
+            continue;
+        }
+
+        let attrib_index = line.find('=');
+        if attrib_index.is_none() {
+            println!("Error({:?} : {}): Could not find '=' sign", level_file_path, line_number);
+            return; // NOTE(erick): Maybe continue?
+        }
+
+        let _split = line.split_at(attrib_index.unwrap());
+        let lhs = (_split.0).trim();
+        let rhs = (_split.1)[1..].trim();
+
+        match lhs {
+            "level_name"                => {_level_name                 = Some(rhs.to_string())},
+            "level_music"               => {_level_music                = Some(rhs.to_string())},
+            "next_level"                => {_next_level                 = Some(rhs.to_string())},
+            "tile_map"                  => {_tile_map                   = Some(rhs.to_string())},
+            "wall_tile"                 => {_wall_tile                  = Some(rhs.to_string())},
+            "floor_tile"                => {_floor_tile                 = Some(rhs.to_string())},
+            "target_tile"               => {_target_tile                = Some(rhs.to_string())},
+            "box_sprite_sheet"          => {_box_sprite_sheet           = Some(rhs.to_string())},
+            "player_position"           => {_player_position            = parse_position_tuple(rhs)},
+            "box_positions"             => {_box_positions              = parse_position_tuple_vec(rhs)},
+            "box_sprite_sheet_width"    => {_box_sprite_sheet_width     = parse_or_none::<i32>(rhs)},
+            "box_sprite_sheet_height"   => {_box_sprite_sheet_height    = parse_or_none::<i32>(rhs)},
+            _                           => {println!("Unknown variable: {}", lhs);}
+        }
+    }
+}
+
+fn parse_or_none<T> (s: &str) -> Option<T> where T: std::str::FromStr {
+    let result = match s.parse::<T>() {
+        Ok(value)   => Some(value),
+        Err(_)      => {
+            println!("Error: Could parse {}", s);
+            None
+        },
+    };
+
+    result
+}
+
+fn tuple_from_strings<T> (v_0_str: &str, v_1_str: &str) -> Option< (T, T) > where T: std::str::FromStr {
+    let v_0 = parse_or_none::<T>(v_0_str);
+    let v_1 = parse_or_none::<T>(v_1_str);
+
+    if v_0.is_none() || v_1.is_none() {
+        return None
+    }
+
+    Some((v_0.unwrap(), v_1.unwrap()))
+}
+
+fn parse_position_tuple(s: &str) -> Option<(i32, i32)> {
+    // NOTE(erick): This regex is almost identical to the one the the parse_position_tuple_vec function. Any modification here should
+    // be reflected there.
+    // NOTE(erick): Matches:
+    // '(' <any number of white spaces> <an integer number> ',' <any number of white spaces> <an integer number> <any number of white spaces> ')'
+    let tuple_re = Regex::new(r"\(\s*(-?[0-9]+),\s*(-?[0-9]+)\s*\)").unwrap();
+
+    let captures = match tuple_re.captures(s) {
+        Some(cap)   => cap,
+        None        => {
+            println!("Error: Could parse {} as a position tuple", s);
+            return None;
+        }
+    };
+
+    let v_0_str = captures.get(1).unwrap().as_str();
+    let v_1_str = captures.get(2).unwrap().as_str();
+
+    let result = tuple_from_strings::<i32>(v_0_str, v_1_str);
+    println!("Parsed: {:?}", result);
+
+    result
+}
+
+fn parse_position_tuple_vec(s: &str) -> Option<Vec< (i32, i32) > > {
+    let mut result : Vec< (i32, i32) > = Vec::new();
+    // TODO(erick): Some unit tests for this regexes would be nice!
+    let tuple_vec_re = Regex::new(
+        r"\{\s*((?:\(\s*(?:-?[0-9]+),\s*(?:-?[0-9]+)\s*\)\s*,\s*)*(?:\(\s*(?:-?[0-9]+),\s*(?:-?[0-9]+)\s*\)))\s*\}")
+        .unwrap();
+
+    // NOTE(erick): This regex is almost identical to the one the the parse_position_tuple function. Any modification here should
+    // be reflected there.
+    let tuple_and_rest_re = Regex::new(r"\s*\(\s*(-?[0-9]+),\s*(-?[0-9]+)\s*\)\s*(?:,\s*(.*))?").unwrap();
+
+    let vec_captures = match tuple_vec_re.captures(s) {
+        Some(cap)   => cap,
+        None        => {
+            println!("Error: Could parse a vector of position tuples: {}", s);
+            return None;
+        }
+    };
+
+    let mut vec_str =  vec_captures.get(1).unwrap().as_str();
+
+    // NOTE(erick): It would be interesting to write an iterator for this loop.
+    loop {
+        let tuple_capture = tuple_and_rest_re.captures(vec_str).unwrap();
+        let tuple_v0_str = tuple_capture.get(1).unwrap().as_str();
+        let tuple_v1_str = tuple_capture.get(2).unwrap().as_str();
+
+        let rest = tuple_capture.get(3);
+
+        let tuple = tuple_from_strings::<i32>(tuple_v0_str, tuple_v1_str);
+        if tuple.is_none() {
+            println!("Failed to parse tuple vector. Could not parse tuple ({:?}, {:?}).\nAborting.",
+                        tuple_v0_str, tuple_v1_str);
+            return None;
+        } else {
+            result.push(tuple.unwrap());
+        }
+
+        if rest.is_none() {
+            break;
+        } else {
+            vec_str = rest.unwrap().as_str();
+        }
+    }
+
+    Some(result)
+}
+
 fn draw_text(renderer: &mut Renderer, font: &Font, color: Color, string: &String, position: Vector2) {
     let text_surface = font.render(string)
         .blended(color).unwrap();
@@ -1076,4 +1235,4 @@ fn pressed_keycode_set(e: &sdl2::EventPump) -> HashSet<Keycode> {
     e.keyboard_state().pressed_scancodes()
         .filter_map(Keycode::from_scancode)
         .collect()
- }
+}

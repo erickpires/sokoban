@@ -1,0 +1,15 @@
+level_name = Tutorial
+level_music = guitar.mp3
+next_level = 1-starting.lvl
+
+wall_tile = wall.bmp
+floor_tile = floor.bmp
+target_tile = target.bmp
+tile_map = maps/0-tutorial.map
+
+player_position = (10, 9)
+
+box_sprite_sheet = box.bmp
+box_sprite_sheet_width = 28
+box_sprite_sheet_height = 28
+box_positions = {(11, 9)}

@@ -3,6 +3,9 @@ name = "sokoban"
 version = "0.1.0"
 authors = ["Erick Pires <pires@erickpires.com>"]
 
+[dependencies]
+regex = "0.2.1"
+
 [dependencies.sdl2]
 version = "0.29"
 default-features = false
