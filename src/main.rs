@@ -901,11 +901,11 @@ fn main() {
     let mut joystick_input = GameInputState::new();
 
 
-    // let (_map, player_position) = parse_level(Path::new("assets/maps/0-tutorial.lvl"), &renderer).unwrap();
-    // let mut map = _map;
-    // println!("We here");
-    let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
-    let mut map = map.unwrap();
+    let (_map, player_position) = parse_level(Path::new("assets/maps/0-tutorial.lvl"), &renderer).unwrap();
+    let mut map = _map;
+    println!("We here");
+    // let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
+    // let mut map = map.unwrap();
 
     //
     // Player
@@ -1221,6 +1221,8 @@ fn parse_level(level_file_path: &Path, renderer: &Renderer) -> (Option<(Map, (u3
     let target_path = asset_path_string(AssetType::Sprite, _target_tile.unwrap().as_str());
     let box_path    = asset_path_string(AssetType::Sprite, _box_sprite_sheet.unwrap().as_str());
 
+    let map_path    = asset_path_string(AssetType::Map, _tile_map.unwrap().as_str());
+
     let level_music_path = match _level_music {
         Some(path) => Some(asset_path_string(AssetType::Sound, path.as_str())),
         None => None,
@@ -1247,6 +1249,8 @@ fn parse_level(level_file_path: &Path, renderer: &Renderer) -> (Option<(Map, (u3
         map_data: _map_data,
         boxes: Vec::new(),
     };
+
+    Map::fill_tiles_and_stride(&mut result_map, Path::new(map_path.as_str()));
 
     for (box_position_x, box_position_y) in _box_positions.unwrap() {
         Map::add_box(&mut result_map, box_position_x, box_position_y);
