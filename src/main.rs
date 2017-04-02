@@ -596,12 +596,13 @@ struct MapData {
 }
 
 impl MapData {
-    fn load(renderer: &Renderer) -> MapData {
-        let (floor, w, h)   = texture_from_path(Path::new("assets/floor.bmp"), renderer);
-        let (wall, ..)      = texture_from_path(Path::new("assets/wall.bmp"), renderer);
-        let (target, ..)    = texture_from_path(Path::new("assets/target.bmp"), renderer);
+    fn load(renderer: &Renderer, floor_path: &Path, wall_path: &Path,
+            target_path: &Path, box_path: &Path) -> MapData {
+        let (floor, w, h)   = texture_from_path(floor_path, renderer);
+        let (wall, ..)      = texture_from_path(wall_path, renderer);
+        let (target, ..)    = texture_from_path(target_path, renderer);
 
-        let(_box, b_w, b_h) = texture_from_path(Path::new("assets/box.bmp"), renderer);
+        let(_box, b_w, b_h) = texture_from_path(box_path, renderer);
 
         MapData {
             floor_texture   : Rc::new(floor),
@@ -616,11 +617,25 @@ impl MapData {
             box_texture_height  : b_h,
         }
     }
+
+    fn load_default(renderer: &Renderer) -> MapData {
+        let default_floor_path  = Path::new("assets/floor.bmp");
+        let default_wall_path   = Path::new("assets/wall.bmp");
+        let default_target_path = Path::new("assets/target.bmp");
+        let default_box_path    = Path::new("assets/box.bmp");
+
+        MapData::load(renderer, default_floor_path, default_wall_path,
+                        default_target_path, default_box_path)
+    }
 }
 
 // TODO(erick): Tiles and box should be in separated structs, otherwise we can't borrow a mutable box
 // and an immutable map. CHECK FIRST!!!!
 struct Map {
+    name        : String,
+    level_music : Option<String>,
+    next_level  : Option<String>,
+
     tiles: Vec<TileType>,
     tiles_stride: i32,
 
@@ -666,23 +681,13 @@ impl Map {
         (position.0, n_lines - position.1 - 1)
     }
 
-    fn from_path(path: &Path, renderer: &Renderer) -> (Result<Map, io::Error>, (i32, i32)) {
-        let _map_data = MapData::load(&renderer);
-
-        let mut result = Map {
-            tiles: Vec::new(),
-            tiles_stride: -1,
-
-            map_data: _map_data,
-            boxes: Vec::new(),
-        };
-
+    fn fill_tiles_and_stride(map: &mut Map, map_file: &Path) -> Result<(Vec<(u32, u32)>, (i32, i32)), io::Error>{
         let mut boxes_position = Vec::new();
         let mut player_position = (-1, -1);
 
-        let input_file = match File::open(path) {
+        let input_file = match File::open(map_file) {
             Ok(file)    => file,
-            Err(e)      => {return (Err(e), player_position)}
+            Err(e)      => {return Err(e)}
         };
 
         let file_data = BufReader::new(&input_file);
@@ -699,7 +704,7 @@ impl Map {
                 n_tiles += 1;
                 let code = code.parse::<u32>().unwrap();
                 let tile_type = TileType::from_code(code).unwrap();
-                result.tiles.push(tile_type);
+                map.tiles.push(tile_type);
 
                 if Map::is_box(code) {
                     // README(erick): These numbers are off-by-one
@@ -710,19 +715,49 @@ impl Map {
                 }
             }
 
-            if result.tiles_stride < 0 {
-                result.tiles_stride = n_tiles as i32;
+            if map.tiles_stride < 0 {
+                map.tiles_stride = n_tiles as i32;
             } else {
-                if result.tiles_stride != n_tiles as i32 {
+                if map.tiles_stride != n_tiles as i32 {
                     // TODO(erick): Error
-                    println!("Invalid line ({}) at file {:?}", n_lines, path);
+                    println!("Invalid line ({}) at file {:?}", n_lines, map_file);
                 }
             }
         }
 
+        Ok((boxes_position, player_position))
+    }
+
+    fn from_path(path: &Path, renderer: &Renderer) -> (Result<Map, io::Error>, (i32, i32)) {
+        let _map_data = MapData::load_default(&renderer);
+
+        let mut result = Map {
+            name: "None".to_string(),
+            level_music : None,
+            next_level  : None,
+
+            tiles: Vec::new(),
+            tiles_stride: -1,
+
+            map_data: _map_data,
+            boxes: Vec::new(),
+        };
+
+         let mut boxes_position;
+         let mut player_position;
+
+         let mut r = Map::fill_tiles_and_stride(&mut result, path);
+         match r {
+            Ok(value)   => {
+                boxes_position = value.0;
+                player_position = value.1;
+             },
+            Err(e)      => { return (Err(e), (-1, -1)); }
+         }
+
         // Now we add the boxes, converting the coordinate system
         for box_position in boxes_position {
-            let (pos_x, pos_y) = Map::from_left_to_right_handed(box_position, n_lines);
+            let (pos_x, pos_y) = Map::from_left_to_right_handed(box_position, Map::n_lines(&result));
             Map::add_box(&mut result, pos_x, pos_y);
         }
 
@@ -730,7 +765,7 @@ impl Map {
             let p_x = player_position.0 as u32;
             let p_y = player_position.1 as u32;
 
-            let p = Map::from_left_to_right_handed((p_x, p_y), n_lines);
+            let p = Map::from_left_to_right_handed((p_x, p_y), Map::n_lines(&result));
             player_position = (p.0 as i32, p.1 as i32)
         }
 
@@ -866,7 +901,9 @@ fn main() {
     let mut joystick_input = GameInputState::new();
 
 
-    parse_level(Path::new("assets/maps/0-tutorial.lvl"));
+    // let (_map, player_position) = parse_level(Path::new("assets/maps/0-tutorial.lvl"), &renderer).unwrap();
+    // let mut map = _map;
+    // println!("We here");
     let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
     let mut map = map.unwrap();
 
@@ -1062,8 +1099,29 @@ fn main() {
     }
 }
 
-fn parse_level(level_file_path: &Path) {
+#[derive(Debug)]
+enum AssetType {
+    Sound,
+    Sprite,
+    Map,
+    Level,
+}
 
+fn asset_path_string(asset_type: AssetType, asset_name: &str) -> String {
+    let mut result = String::new();
+
+    match asset_type {
+        AssetType::Sound    => { result.push_str("assets/") },
+        AssetType::Sprite   => { result.push_str("assets/") },
+        AssetType::Map      => { result.push_str("assets/maps/") },
+        AssetType::Level    => { result.push_str("assets/maps/") },
+    }
+    result.push_str(asset_name);
+
+    result
+}
+
+fn parse_level(level_file_path: &Path, renderer: &Renderer) -> (Option<(Map, (u32, u32))>) {
     let mut _level_name = None;
     let mut _level_music = None;
     let mut _next_level = None;
@@ -1073,13 +1131,13 @@ fn parse_level(level_file_path: &Path) {
     let mut _tile_map = None;
     let mut _player_position = None;
     let mut _box_sprite_sheet = None;
-    let mut _box_sprite_sheet_width = None;
-    let mut _box_sprite_sheet_height = None;
+    let mut _box_sprite_width = None;
+    let mut _box_sprite_height = None;
     let mut _box_positions = None;
 
     let level_file = match File::open(level_file_path) {
         Ok(file)    => file,
-        Err(_)      => {return}
+        Err(_)      => { return None; }
     };
 
     let level_data = BufReader::new(&level_file);
@@ -1096,7 +1154,7 @@ fn parse_level(level_file_path: &Path) {
         let attrib_index = line.find('=');
         if attrib_index.is_none() {
             println!("Error({:?} : {}): Could not find '=' sign", level_file_path, line_number);
-            return; // NOTE(erick): Maybe continue?
+            return None; // NOTE(erick): Maybe continue?
         }
 
         let _split = line.split_at(attrib_index.unwrap());
@@ -1104,21 +1162,97 @@ fn parse_level(level_file_path: &Path) {
         let rhs = (_split.1)[1..].trim();
 
         match lhs {
-            "level_name"                => {_level_name                 = Some(rhs.to_string())},
-            "level_music"               => {_level_music                = Some(rhs.to_string())},
-            "next_level"                => {_next_level                 = Some(rhs.to_string())},
-            "tile_map"                  => {_tile_map                   = Some(rhs.to_string())},
-            "wall_tile"                 => {_wall_tile                  = Some(rhs.to_string())},
-            "floor_tile"                => {_floor_tile                 = Some(rhs.to_string())},
-            "target_tile"               => {_target_tile                = Some(rhs.to_string())},
-            "box_sprite_sheet"          => {_box_sprite_sheet           = Some(rhs.to_string())},
-            "player_position"           => {_player_position            = parse_position_tuple(rhs)},
-            "box_positions"             => {_box_positions              = parse_position_tuple_vec(rhs)},
-            "box_sprite_sheet_width"    => {_box_sprite_sheet_width     = parse_or_none::<i32>(rhs)},
-            "box_sprite_sheet_height"   => {_box_sprite_sheet_height    = parse_or_none::<i32>(rhs)},
-            _                           => {println!("Unknown variable: {}", lhs);}
+            "level_name"          => {_level_name           = Some(rhs.to_string())},
+            "level_music"         => {_level_music          = Some(rhs.to_string())},
+            "next_level"          => {_next_level           = Some(rhs.to_string())},
+            "tile_map"            => {_tile_map             = Some(rhs.to_string())},
+            "wall_tile"           => {_wall_tile            = Some(rhs.to_string())},
+            "floor_tile"          => {_floor_tile           = Some(rhs.to_string())},
+            "target_tile"         => {_target_tile          = Some(rhs.to_string())},
+            "box_sprite_sheet"    => {_box_sprite_sheet     = Some(rhs.to_string())},
+            "player_position"     => {_player_position      = parse_position_tuple(rhs)},
+            "box_positions"       => {_box_positions        = parse_position_tuple_vec(rhs)},
+            "box_sprite_width"    => {_box_sprite_width     = parse_or_none::<i32>(rhs)},
+            "box_sprite_height"   => {_box_sprite_height    = parse_or_none::<i32>(rhs)},
+            _                     => {println!("Unknown variable: {}", lhs);}
         }
     }
+
+    //
+    // We got all data from the file. Now we need to check if we got all the information that we need.
+    //
+    if _level_name.is_none() {
+        panic!("Error({:?}): The level has no name.", level_file_path);
+    }
+
+
+    if _wall_tile.is_none() {
+        panic!("Error({:?}): A wall tile must be specified", level_file_path);
+    }
+    if _floor_tile.is_none() {
+        panic!("Error({:?}): A floor tile must be specified", level_file_path);
+    }
+    if _target_tile.is_none() {
+        panic!("Error({:?}): A target tile must be specified", level_file_path);
+    }
+    if _box_sprite_sheet.is_none() {
+        panic!("Error({:?}): A box sprite sheet must be specified", level_file_path);
+    }
+    if _box_sprite_width.is_none() || _box_sprite_height.is_none() {
+        panic!("Error({:?}): The box sprite dimensions must be specified", level_file_path);
+    }
+
+
+    if _tile_map.is_none() {
+        panic!("Error({:?}): A tile map must be specified", level_file_path);
+    }
+    if _player_position.is_none() {
+        panic!("Error({:?}): No player initial position", level_file_path);
+    }
+    if _box_positions.is_none() {
+        panic!("Error({:?}): No boxes.", level_file_path);
+    }
+
+    //
+    // Now we create the map and the player
+    //
+    let floor_path  = asset_path_string(AssetType::Sprite, _floor_tile.unwrap().as_str());
+    let wall_path   = asset_path_string(AssetType::Sprite, _wall_tile.unwrap().as_str());
+    let target_path = asset_path_string(AssetType::Sprite, _target_tile.unwrap().as_str());
+    let box_path    = asset_path_string(AssetType::Sprite, _box_sprite_sheet.unwrap().as_str());
+
+    let level_music_path = match _level_music {
+        Some(path) => Some(asset_path_string(AssetType::Sound, path.as_str())),
+        None => None,
+    };
+    let next_level_path = match _next_level {
+        Some(path) => Some(asset_path_string(AssetType::Level, path.as_str())),
+        None => None,
+    };
+
+    let _map_data = MapData::load(renderer,
+                                    Path::new(floor_path.as_str()),
+                                    Path::new(wall_path.as_str()),
+                                    Path::new(target_path.as_str()),
+                                    Path::new(box_path.as_str()));
+
+    let mut result_map = Map {
+        name        : _level_name.unwrap().to_string(),
+        level_music : level_music_path,
+        next_level  : next_level_path,
+
+        tiles: Vec::new(),
+        tiles_stride: -1,
+
+        map_data: _map_data,
+        boxes: Vec::new(),
+    };
+
+    for (box_position_x, box_position_y) in _box_positions.unwrap() {
+        Map::add_box(&mut result_map, box_position_x, box_position_y);
+    }
+
+    Some((result_map, _player_position.unwrap()))
 }
 
 fn parse_or_none<T> (s: &str) -> Option<T> where T: std::str::FromStr {
@@ -1144,7 +1278,7 @@ fn tuple_from_strings<T> (v_0_str: &str, v_1_str: &str) -> Option< (T, T) > wher
     Some((v_0.unwrap(), v_1.unwrap()))
 }
 
-fn parse_position_tuple(s: &str) -> Option<(i32, i32)> {
+fn parse_position_tuple(s: &str) -> Option<(u32, u32)> {
     // NOTE(erick): This regex is almost identical to the one the the parse_position_tuple_vec function. Any modification here should
     // be reflected there.
     // NOTE(erick): Matches:
@@ -1162,14 +1296,14 @@ fn parse_position_tuple(s: &str) -> Option<(i32, i32)> {
     let v_0_str = captures.get(1).unwrap().as_str();
     let v_1_str = captures.get(2).unwrap().as_str();
 
-    let result = tuple_from_strings::<i32>(v_0_str, v_1_str);
+    let result = tuple_from_strings::<u32>(v_0_str, v_1_str);
     println!("Parsed: {:?}", result);
 
     result
 }
 
-fn parse_position_tuple_vec(s: &str) -> Option<Vec< (i32, i32) > > {
-    let mut result : Vec< (i32, i32) > = Vec::new();
+fn parse_position_tuple_vec(s: &str) -> Option<Vec< (u32, u32) > > {
+    let mut result = Vec::new();
     // TODO(erick): Some unit tests for this regexes would be nice!
     let tuple_vec_re = Regex::new(
         r"\{\s*((?:\(\s*(?:-?[0-9]+),\s*(?:-?[0-9]+)\s*\)\s*,\s*)*(?:\(\s*(?:-?[0-9]+),\s*(?:-?[0-9]+)\s*\)))\s*\}")
@@ -1197,7 +1331,7 @@ fn parse_position_tuple_vec(s: &str) -> Option<Vec< (i32, i32) > > {
 
         let rest = tuple_capture.get(3);
 
-        let tuple = tuple_from_strings::<i32>(tuple_v0_str, tuple_v1_str);
+        let tuple = tuple_from_strings::<u32>(tuple_v0_str, tuple_v1_str);
         if tuple.is_none() {
             println!("Failed to parse tuple vector. Could not parse tuple ({:?}, {:?}).\nAborting.",
                         tuple_v0_str, tuple_v1_str);
