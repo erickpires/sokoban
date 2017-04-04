@@ -30,6 +30,7 @@ use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::fs::File;
+use std::io::Write;
 
 use std::ops::Add;
 use std::ops::Mul;
@@ -38,6 +39,7 @@ use std::ops::AddAssign;
 use regex::Regex;
 use regex::Captures;
 
+use std::collections::hash_map::HashMap;
 
 #[derive(Debug)]
 #[derive(Clone)]
@@ -652,14 +654,14 @@ impl Map {
         code == 3
     }
 
-    fn add_box(map: &mut Map, _x: u32, _y: u32) {
+    fn add_box(map: &mut Map, sprite_width: u32, sprite_height: u32, _x: u32, _y: u32) {
         let boxes_anim_info = AnimationInfo::new(false, 0);
 
         let _sprite = SpriteSheet::new(map.map_data.box_texture.clone(),
                         map.map_data.box_texture_width,
                         map.map_data.box_texture_height,
-                        map.map_data.box_texture_width,
-                        map.map_data.box_texture_height,
+                        sprite_width,
+                        sprite_height,
                         boxes_anim_info);
 
         let e_box = Entity {
@@ -758,7 +760,8 @@ impl Map {
         // Now we add the boxes, converting the coordinate system
         for box_position in boxes_position {
             let (pos_x, pos_y) = Map::from_left_to_right_handed(box_position, Map::n_lines(&result));
-            Map::add_box(&mut result, pos_x, pos_y);
+            // TODO(erick): Hardcoded!!!!
+            Map::add_box(&mut result, 28, 28, pos_x, pos_y);
         }
 
         if !(player_position.0 < 0 || player_position.1 < 0) {
@@ -901,11 +904,19 @@ fn main() {
     let mut joystick_input = GameInputState::new();
 
 
-    let (_map, player_position) = parse_level(Path::new("assets/maps/0-tutorial.lvl"), &renderer).unwrap();
+    // TODO(erick): parse_level can construct the whole path, we don't need to pass it here!!!
+    let (_map, player_position) = parse_level(Path::new("assets/maps/text.lvl"), &renderer).unwrap();
     let mut map = _map;
-    println!("We here");
     // let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
     // let mut map = map.unwrap();
+
+    // let mut default_textures = HashMap::new();
+    // default_textures.insert("wall_tile",        "wall.bmp"  .to_string());
+    // default_textures.insert("floor_tile",       "floor.bmp" .to_string());
+    // default_textures.insert("target_tile",      "target.bmp".to_string());
+    // default_textures.insert("box_sprite_sheet", "box.bmp"   .to_string());
+
+    // write_level_file("text", &map, &default_textures, (0, 0));
 
     //
     // Player
@@ -1121,19 +1132,125 @@ fn asset_path_string(asset_type: AssetType, asset_name: &str) -> String {
     result
 }
 
+fn remove_asset_path(asset_type: AssetType, asset_path: &str) -> &str {
+    let mut offset : usize;
+
+    match asset_type {
+        AssetType::Sound    => { offset = "assets/".len() },
+        AssetType::Sprite   => { offset = "assets/".len() },
+        AssetType::Map      => { offset = "assets/maps/".len() },
+        AssetType::Level    => { offset = "assets/maps/".len() },
+    };
+
+    &asset_path[offset..]
+}
+
+#[allow(dead_code)]
+fn write_level_file(level_file_name: &str, map: &Map, textures_names: &HashMap<&str, String>, player_position: (u32, u32)) {
+    //
+    // Level file
+    //
+    let mut level_file_with_extension = String::from(level_file_name);
+    level_file_with_extension.push_str(".lvl");
+
+    let level_file_path = asset_path_string(AssetType::Level, level_file_with_extension.as_str());
+    let level_output_path = Path::new(level_file_path.as_str());
+
+    //
+    // Map file
+    //
+    let mut map_file_with_extension = String::from(level_file_name);
+    map_file_with_extension.push_str(".map");
+
+    let map_file_path = asset_path_string(AssetType::Map, map_file_with_extension.as_str());
+    let map_output_path = Path::new(map_file_path.as_str());
+
+
+    if map.boxes.len() == 0 {
+        panic!("Map must have at least one box");
+    }
+
+    let mut output_file = match File::create(level_output_path) {
+        Ok(file)    => file,
+        Err(_)      => panic!("Could not open file {:?}", level_output_path),
+    };
+
+    output_file.write_all(format!("level_name = {}\n", map.name).as_bytes());
+
+    if !map.level_music.is_none() {
+        output_file.write_all(format!("level_music = {}\n",
+                remove_asset_path(AssetType::Sound, map.level_music.as_ref().unwrap())).as_bytes());
+    }
+
+    if !map.next_level.is_none() {
+        output_file.write_all(format!("next_level = {}\n\n",
+            remove_asset_path(AssetType::Level, map.next_level.as_ref().unwrap().as_str())).as_bytes());
+    }
+
+    output_file.write_all(format!("wall_tile = {}\n", textures_names.get("wall_tile").as_ref().unwrap()).as_bytes());
+    output_file.write_all(format!("floor_tile = {}\n", textures_names.get("floor_tile").as_ref().unwrap()).as_bytes());
+    output_file.write_all(format!("target_tile = {}\n\n", textures_names.get("target_tile").as_ref().unwrap()).as_bytes());
+
+    output_file.write_all(format!("player_position = ({}, {})\n\n", player_position.0, player_position.1).as_bytes());
+
+    output_file.write_all(format!("box_sprite_sheet = {}\n", textures_names.get("box_sprite_sheet").as_ref().unwrap()).as_bytes());
+    output_file.write_all(format!("box_sprite_width = {}\n", map.boxes[0].sprite_sheet.sprite_width).as_bytes());
+    output_file.write_all(format!("box_sprite_height = {}\n", map.boxes[0].sprite_sheet.sprite_height).as_bytes());
+
+    output_file.write_all("box_positions = {".as_bytes());
+
+    let mut first = true;
+    for _box in &map.boxes {
+        if !first {
+            output_file.write_all(", ".as_bytes());
+        }
+        output_file.write_all(format!("({}, {})", _box.position.x as u32, _box.position.y as u32).as_bytes());
+        first = false;
+    }
+
+    output_file.write_all("}\n\n".as_bytes());
+
+    output_file.write_all(format!("tile_map = {}", map_file_with_extension).as_bytes());
+    write_map_file(map_output_path, map);
+}
+
+#[allow(dead_code)]
+fn write_map_file(map_path: &Path, map: &Map) {
+    let mut map_file = File::create(map_path).expect(format!("Could not open file {:?}", map_path).as_str());
+
+    let mut current_col = 0;
+    for tile_type in &map.tiles {
+        if current_col == map.tiles_stride {
+            current_col = 0;
+            map_file.write_all("\n".as_bytes());
+        }
+
+        let tile_code = match tile_type {
+            &TileType::Wall      => 1,
+            &TileType::Floor     => 0,
+            &TileType::Target    => 4,
+            &TileType::Blank     => 5,
+        };
+
+        map_file.write_all(format!("{} ", tile_code).as_bytes());
+
+        current_col += 1;
+    }
+}
+
 fn parse_level(level_file_path: &Path, renderer: &Renderer) -> (Option<(Map, (u32, u32))>) {
-    let mut _level_name = None;
-    let mut _level_music = None;
-    let mut _next_level = None;
-    let mut _wall_tile = None;
-    let mut _floor_tile = None;
-    let mut _target_tile = None;
-    let mut _tile_map = None;
-    let mut _player_position = None;
-    let mut _box_sprite_sheet = None;
-    let mut _box_sprite_width = None;
-    let mut _box_sprite_height = None;
-    let mut _box_positions = None;
+    let mut _level_name         = None;
+    let mut _level_music        = None;
+    let mut _next_level         = None;
+    let mut _wall_tile          = None;
+    let mut _floor_tile         = None;
+    let mut _target_tile        = None;
+    let mut _tile_map           = None;
+    let mut _player_position    = None;
+    let mut _box_sprite_sheet   = None;
+    let mut _box_sprite_width   = None;
+    let mut _box_sprite_height  = None;
+    let mut _box_positions      = None;
 
     let level_file = match File::open(level_file_path) {
         Ok(file)    => file,
@@ -1172,8 +1289,8 @@ fn parse_level(level_file_path: &Path, renderer: &Renderer) -> (Option<(Map, (u3
             "box_sprite_sheet"    => {_box_sprite_sheet     = Some(rhs.to_string())},
             "player_position"     => {_player_position      = parse_position_tuple(rhs)},
             "box_positions"       => {_box_positions        = parse_position_tuple_vec(rhs)},
-            "box_sprite_width"    => {_box_sprite_width     = parse_or_none::<i32>(rhs)},
-            "box_sprite_height"   => {_box_sprite_height    = parse_or_none::<i32>(rhs)},
+            "box_sprite_width"    => {_box_sprite_width     = parse_or_none::<u32>(rhs)},
+            "box_sprite_height"   => {_box_sprite_height    = parse_or_none::<u32>(rhs)},
             _                     => {println!("Unknown variable: {}", lhs);}
         }
     }
@@ -1253,7 +1370,8 @@ fn parse_level(level_file_path: &Path, renderer: &Renderer) -> (Option<(Map, (u3
     Map::fill_tiles_and_stride(&mut result_map, Path::new(map_path.as_str()));
 
     for (box_position_x, box_position_y) in _box_positions.unwrap() {
-        Map::add_box(&mut result_map, box_position_x, box_position_y);
+        Map::add_box(&mut result_map, _box_sprite_width.unwrap(), _box_sprite_height.unwrap(),
+                     box_position_x, box_position_y);
     }
 
     Some((result_map, _player_position.unwrap()))
@@ -1301,7 +1419,6 @@ fn parse_position_tuple(s: &str) -> Option<(u32, u32)> {
     let v_1_str = captures.get(2).unwrap().as_str();
 
     let result = tuple_from_strings::<u32>(v_0_str, v_1_str);
-    println!("Parsed: {:?}", result);
 
     result
 }
