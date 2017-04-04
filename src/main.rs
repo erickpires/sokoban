@@ -683,14 +683,11 @@ impl Map {
         (position.0, n_lines - position.1 - 1)
     }
 
-    fn fill_tiles_and_stride(map: &mut Map, map_file: &Path) -> Result<(Vec<(u32, u32)>, (i32, i32)), io::Error>{
+    fn fill_tiles_and_stride(map: &mut Map, map_file: &Path) {
         let mut boxes_position = Vec::new();
         let mut player_position = (-1, -1);
 
-        let input_file = match File::open(map_file) {
-            Ok(file)    => file,
-            Err(e)      => {return Err(e)}
-        };
+        let input_file = File::open(map_file).expect(format!("Could not open file: {:?}", map_file).as_str());
 
         let file_data = BufReader::new(&input_file);
 
@@ -726,54 +723,8 @@ impl Map {
                 }
             }
         }
-
-        Ok((boxes_position, player_position))
     }
 
-    fn from_path(path: &Path, renderer: &Renderer) -> (Result<Map, io::Error>, (i32, i32)) {
-        let _map_data = MapData::load_default(&renderer);
-
-        let mut result = Map {
-            name: "None".to_string(),
-            level_music : None,
-            next_level  : None,
-
-            tiles: Vec::new(),
-            tiles_stride: -1,
-
-            map_data: _map_data,
-            boxes: Vec::new(),
-        };
-
-         let mut boxes_position;
-         let mut player_position;
-
-         let mut r = Map::fill_tiles_and_stride(&mut result, path);
-         match r {
-            Ok(value)   => {
-                boxes_position = value.0;
-                player_position = value.1;
-             },
-            Err(e)      => { return (Err(e), (-1, -1)); }
-         }
-
-        // Now we add the boxes, converting the coordinate system
-        for box_position in boxes_position {
-            let (pos_x, pos_y) = Map::from_left_to_right_handed(box_position, Map::n_lines(&result));
-            // TODO(erick): Hardcoded!!!!
-            Map::add_box(&mut result, 28, 28, pos_x, pos_y);
-        }
-
-        if !(player_position.0 < 0 || player_position.1 < 0) {
-            let p_x = player_position.0 as u32;
-            let p_y = player_position.1 as u32;
-
-            let p = Map::from_left_to_right_handed((p_x, p_y), Map::n_lines(&result));
-            player_position = (p.0 as i32, p.1 as i32)
-        }
-
-        (Ok(result), (player_position))
-    }
 
     fn tile_at(&self, x: u32, y: u32) -> TileType {
         // NOTE(erick): Tiles are storage in a left-handed coordinate system.
@@ -903,19 +854,14 @@ fn main() {
     let mut keyboard_input = GameInputState::new();
     let mut joystick_input = GameInputState::new();
 
-
-    // TODO(erick): parse_level can construct the whole path, we don't need to pass it here!!!
-    let (_map, player_position) = parse_level(Path::new("assets/maps/3-zimbrao.lvl"), &renderer).unwrap();
+    let (_map, player_position) = parse_level("1-starting", &renderer).unwrap();
     let mut map = _map;
-    // let (map, player_position) = Map::from_path(Path::new("assets/maps/3-zimbrao.map_old"), &renderer);
-    // let mut map = map.unwrap();
 
     // let mut default_textures = HashMap::new();
     // default_textures.insert("wall_tile",        "wall.bmp"  .to_string());
     // default_textures.insert("floor_tile",       "floor.bmp" .to_string());
     // default_textures.insert("target_tile",      "target.bmp".to_string());
     // default_textures.insert("box_sprite_sheet", "box.bmp"   .to_string());
-
     // write_level_file("3-zimbrao", &map, &default_textures, (player_position.0 as u32, player_position.1 as u32));
 
     //
@@ -1238,7 +1184,14 @@ fn write_map_file(map_path: &Path, map: &Map) {
     }
 }
 
-fn parse_level(level_file_path: &Path, renderer: &Renderer) -> (Option<(Map, (u32, u32))>) {
+fn parse_level(level_name: &str, renderer: &Renderer) -> (Option<(Map, (u32, u32))>) {
+    let mut filename = String::from(level_name);
+    filename.push_str(".lvl");
+
+    let level_full_path_string = asset_path_string(AssetType::Level, filename.as_str());
+    let level_file_path = Path::new(level_full_path_string.as_str());
+
+
     let mut _level_name         = None;
     let mut _level_music        = None;
     let mut _next_level         = None;
