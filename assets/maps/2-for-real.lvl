@@ -1,0 +1,13 @@
+level_name = None
+wall_tile = wall.bmp
+floor_tile = floor.bmp
+target_tile = target.bmp
+
+player_position = (11, 4)
+
+box_sprite_sheet = box.bmp
+box_sprite_width = 28
+box_sprite_height = 28
+box_positions = {(5, 10), (7, 9), (5, 8), (7, 8), (2, 5), (5, 5)}
+
+tile_map = 2-for-real.map

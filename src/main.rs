@@ -905,9 +905,9 @@ fn main() {
 
 
     // TODO(erick): parse_level can construct the whole path, we don't need to pass it here!!!
-    let (_map, player_position) = parse_level(Path::new("assets/maps/text.lvl"), &renderer).unwrap();
+    let (_map, player_position) = parse_level(Path::new("assets/maps/3-zimbrao.lvl"), &renderer).unwrap();
     let mut map = _map;
-    // let (map, player_position) = Map::from_path(Path::new("assets/maps/2-for-real.map"), &renderer);
+    // let (map, player_position) = Map::from_path(Path::new("assets/maps/3-zimbrao.map_old"), &renderer);
     // let mut map = map.unwrap();
 
     // let mut default_textures = HashMap::new();
@@ -916,7 +916,7 @@ fn main() {
     // default_textures.insert("target_tile",      "target.bmp".to_string());
     // default_textures.insert("box_sprite_sheet", "box.bmp"   .to_string());
 
-    // write_level_file("text", &map, &default_textures, (0, 0));
+    // write_level_file("3-zimbrao", &map, &default_textures, (player_position.0 as u32, player_position.1 as u32));
 
     //
     // Player
