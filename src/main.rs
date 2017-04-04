@@ -1079,7 +1079,7 @@ fn asset_path_string(asset_type: AssetType, asset_name: &str) -> String {
 }
 
 fn remove_asset_path(asset_type: AssetType, asset_path: &str) -> &str {
-    let mut offset : usize;
+    let offset : usize;
 
     match asset_type {
         AssetType::Sound    => { offset = "assets/".len() },
@@ -1121,42 +1121,57 @@ fn write_level_file(level_file_name: &str, map: &Map, textures_names: &HashMap<&
         Err(_)      => panic!("Could not open file {:?}", level_output_path),
     };
 
-    output_file.write_all(format!("level_name = {}\n", map.name).as_bytes());
+    output_file.write_all(format!("level_name = {}\n", map.name).as_bytes())
+        .expect("Failed to write");
 
     if !map.level_music.is_none() {
         output_file.write_all(format!("level_music = {}\n",
-                remove_asset_path(AssetType::Sound, map.level_music.as_ref().unwrap())).as_bytes());
+            remove_asset_path(AssetType::Sound, map.level_music.as_ref().unwrap())).as_bytes())
+            .expect("Failed to write");
     }
 
     if !map.next_level.is_none() {
         output_file.write_all(format!("next_level = {}\n\n",
-            remove_asset_path(AssetType::Level, map.next_level.as_ref().unwrap().as_str())).as_bytes());
+            remove_asset_path(AssetType::Level, map.next_level.as_ref().unwrap().as_str())).as_bytes())
+            .expect("Failed to write");
     }
 
-    output_file.write_all(format!("wall_tile = {}\n", textures_names.get("wall_tile").as_ref().unwrap()).as_bytes());
-    output_file.write_all(format!("floor_tile = {}\n", textures_names.get("floor_tile").as_ref().unwrap()).as_bytes());
-    output_file.write_all(format!("target_tile = {}\n\n", textures_names.get("target_tile").as_ref().unwrap()).as_bytes());
+    output_file.write_all(format!("wall_tile = {}\n", textures_names.get("wall_tile").as_ref().unwrap()).as_bytes())
+        .expect("Failed to write");
+    output_file.write_all(format!("floor_tile = {}\n", textures_names.get("floor_tile").as_ref().unwrap()).as_bytes())
+        .expect("Failed to write");
+    output_file.write_all(format!("target_tile = {}\n\n", textures_names.get("target_tile").as_ref().unwrap()).as_bytes())
+        .expect("Failed to write");
 
-    output_file.write_all(format!("player_position = ({}, {})\n\n", player_position.0, player_position.1).as_bytes());
+    output_file.write_all(format!("player_position = ({}, {})\n\n", player_position.0, player_position.1).as_bytes())
+        .expect("Failed to write");
 
-    output_file.write_all(format!("box_sprite_sheet = {}\n", textures_names.get("box_sprite_sheet").as_ref().unwrap()).as_bytes());
-    output_file.write_all(format!("box_sprite_width = {}\n", map.boxes[0].sprite_sheet.sprite_width).as_bytes());
-    output_file.write_all(format!("box_sprite_height = {}\n", map.boxes[0].sprite_sheet.sprite_height).as_bytes());
+    output_file.write_all(format!("box_sprite_sheet = {}\n", textures_names.get("box_sprite_sheet").as_ref().unwrap()).as_bytes())
+        .expect("Failed to write");
+    output_file.write_all(format!("box_sprite_width = {}\n", map.boxes[0].sprite_sheet.sprite_width).as_bytes())
+        .expect("Failed to write");
+    output_file.write_all(format!("box_sprite_height = {}\n", map.boxes[0].sprite_sheet.sprite_height).as_bytes())
+        .expect("Failed to write");
 
-    output_file.write_all("box_positions = {".as_bytes());
+    output_file.write_all("box_positions = {".as_bytes())
+        .expect("Failed to write");
 
     let mut first = true;
     for _box in &map.boxes {
         if !first {
-            output_file.write_all(", ".as_bytes());
+            output_file.write_all(", ".as_bytes())
+                .expect("Failed to write");
         }
-        output_file.write_all(format!("({}, {})", _box.position.x as u32, _box.position.y as u32).as_bytes());
+        output_file.write_all(format!("({}, {})", _box.position.x as u32, _box.position.y as u32).as_bytes())
+            .expect("Failed to write");
         first = false;
     }
 
-    output_file.write_all("}\n\n".as_bytes());
+    output_file.write_all("}\n\n".as_bytes())
+        .expect("Failed to write");
 
-    output_file.write_all(format!("tile_map = {}", map_file_with_extension).as_bytes());
+    output_file.write_all(format!("tile_map = {}", map_file_with_extension).as_bytes())
+        .expect("Failed to write");
     write_map_file(map_output_path, map);
 }
 
@@ -1168,7 +1183,8 @@ fn write_map_file(map_path: &Path, map: &Map) {
     for tile_type in &map.tiles {
         if current_col == map.tiles_stride {
             current_col = 0;
-            map_file.write_all("\n".as_bytes());
+            map_file.write_all("\n".as_bytes())
+            .expect("Failed to write");;
         }
 
         let tile_code = match tile_type {
@@ -1178,7 +1194,8 @@ fn write_map_file(map_path: &Path, map: &Map) {
             &TileType::Blank     => 5,
         };
 
-        map_file.write_all(format!("{} ", tile_code).as_bytes());
+        map_file.write_all(format!("{} ", tile_code).as_bytes())
+        .expect("Failed to write");
 
         current_col += 1;
     }
