@@ -26,7 +26,6 @@ use std::path::Path;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::fs::File;
@@ -37,7 +36,6 @@ use std::ops::Mul;
 use std::ops::AddAssign;
 
 use regex::Regex;
-use regex::Captures;
 
 use std::collections::hash_map::HashMap;
 
@@ -165,6 +163,7 @@ impl<'a> Add<Vector2> for &'a Rect2 {
     }
 }
 
+#[allow(dead_code)]
 fn allowed_motion_before_collision(moving: &Rect2, direction: Vector2, obstacle: &Rect2) -> f32 {
     // TODO(erick): We should binary search and find the correct movement amount.
     if moving.collides_with(obstacle) {
@@ -620,6 +619,7 @@ impl MapData {
         }
     }
 
+    #[allow(dead_code)]
     fn load_default(renderer: &Renderer) -> MapData {
         let default_floor_path  = Path::new("assets/floor.bmp");
         let default_wall_path   = Path::new("assets/wall.bmp");
@@ -646,14 +646,6 @@ struct Map {
 }
 
 impl Map {
-    fn is_box(code: u32) -> bool {
-        code == 2
-    }
-
-    fn is_player(code: u32) -> bool {
-        code == 3
-    }
-
     fn add_box(map: &mut Map, sprite_width: u32, sprite_height: u32, _x: u32, _y: u32) {
         let boxes_anim_info = AnimationInfo::new(false, 0);
 
@@ -679,14 +671,12 @@ impl Map {
         map.boxes.push(e_box);
     }
 
+    #[allow(dead_code)]
     fn from_left_to_right_handed(position : (u32, u32), n_lines: u32) -> (u32, u32) {
         (position.0, n_lines - position.1 - 1)
     }
 
     fn fill_tiles_and_stride(map: &mut Map, map_file: &Path) {
-        let mut boxes_position = Vec::new();
-        let mut player_position = (-1, -1);
-
         let input_file = File::open(map_file).expect(format!("Could not open file: {:?}", map_file).as_str());
 
         let file_data = BufReader::new(&input_file);
@@ -704,14 +694,6 @@ impl Map {
                 let code = code.parse::<u32>().unwrap();
                 let tile_type = TileType::from_code(code).unwrap();
                 map.tiles.push(tile_type);
-
-                if Map::is_box(code) {
-                    // README(erick): These numbers are off-by-one
-                    boxes_position.push((n_tiles - 1, n_lines - 1));
-                } else if Map::is_player(code) {
-                    // README(erick): These numbers are off-by-one
-                    player_position = ((n_tiles - 1) as i32, (n_lines - 1) as i32);
-                }
             }
 
             if map.tiles_stride < 0 {
