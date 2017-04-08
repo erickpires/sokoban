@@ -2,7 +2,7 @@ level_name = None
 wall_tile = wall.bmp
 floor_tile = floor.bmp
 target_tile = target.bmp
-level_music = sair_so.mp3
+// level_music = sair_so.mp3
 
 player_position = (10, 9)
 
