@@ -1220,6 +1220,9 @@ fn parse_level(level_name: &str, renderer: &Renderer) -> (Option<(Map, Entity)>)
         if line == "" {
             continue;
         }
+        if line.starts_with("//") {
+            continue;
+        }
 
         let attrib_index = line.find('=');
         if attrib_index.is_none() {
