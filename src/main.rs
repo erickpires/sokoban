@@ -825,7 +825,8 @@ fn main() {
 
 
     // Load a font
-    let font = ttf_context.load_font(Path::new("assets/font.ttf"), 22).unwrap();
+    let fps_font = ttf_context.load_font(Path::new("assets/font_pixelated.ttf"), 22).unwrap();
+    let level_title_font = ttf_context.load_font(Path::new("assets/font_6809.ttf"), 54).unwrap();
     // font.set_style(sdl2::ttf::STYLE_BOLD);
 
     //
@@ -943,15 +944,6 @@ fn main() {
             move_direction.y = joystick_input.left_y_axis;
         }
 
-        // {
-        //     // HACK(erick): The controller input should be handed properly
-        //     if move_direction.y.abs() > move_direction.x.abs() {
-        //         move_direction.x = 0.0
-        //     } else {
-        //         move_direction.y = 0.0
-        //     }
-        // }
-
         // HACK(erick): We are moving the player (and the boxes) here.
         // This code need to be generalized, but I don't know to to generalize it yet.
         // TODO(erick): Entity-vs-entity collision when the second entity is not movable
@@ -1005,8 +997,9 @@ fn main() {
         player.draw(&mut renderer);
         running_cat.draw(&mut renderer);
 
-        draw_text(&mut renderer, &font, Color::RGBA(255, 0, 0, 255), &fps_text, Vector2::new(0.02, 0.02));
+        draw_text(&mut renderer, &fps_font, Color::RGB(255, 0, 0), &fps_text, Vector2::new(0.02, 0.02), false);
 
+        draw_text(&mut renderer, &level_title_font, Color::RGBA(0, 167, 208, 127), &map.name, Vector2::new(0.5, 0.1), true);
 
         renderer.present();
 
@@ -1428,7 +1421,7 @@ fn parse_position_tuple_vec(s: &str) -> Option<Vec< (u32, u32) > > {
     Some(result)
 }
 
-fn draw_text(renderer: &mut Renderer, font: &Font, color: Color, string: &String, position: Vector2) {
+fn draw_text(renderer: &mut Renderer, font: &Font, color: Color, string: &String, position: Vector2, centered: bool) {
     let text_surface = font.render(string)
         .blended(color).unwrap();
     let mut text_texture = renderer.create_texture_from_surface(&text_surface).unwrap();
@@ -1438,7 +1431,13 @@ fn draw_text(renderer: &mut Renderer, font: &Font, color: Color, string: &String
 
 
     let TextureQuery { width: text_width, height: text_height, .. } = text_texture.query();
-    let text_rect = Rect::new(text_x, text_y, text_width, text_height);
+    let text_rect;
+    
+    if centered {
+        text_rect = Rect::new(text_x - (text_width / 2) as i32, text_y - (text_height / 2) as i32, text_width, text_height);
+    } else {
+        text_rect = Rect::new(text_x, text_y, text_width, text_height);
+    }
 
     renderer.copy(&mut text_texture, None, Some(text_rect)).unwrap();
 }

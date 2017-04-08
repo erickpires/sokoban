@@ -1,4 +1,4 @@
-level_name = None
+level_name = Starting
 wall_tile = wall.bmp
 floor_tile = floor.bmp
 target_tile = target.bmp
