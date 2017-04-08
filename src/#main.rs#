@@ -839,11 +839,7 @@ fn main() {
     //
     let (mut map, mut player) = parse_level("1-starting", &renderer).unwrap();
     
-    let level_music;
-    if !map.level_music.is_none() {
-        level_music = play_music(Path::new(map.level_music.as_ref().unwrap().as_str()));
-    }
-    
+    let level_music = play_music(Path::new(map.level_music.unwarp()));
     
     // NOTE(erick): Running cat animation stuff. This is only so we can have
     // an example of the animation code
