@@ -230,10 +230,8 @@ impl AudioMixer {
 
 fn play_music<'a> (filename: &Path) -> Music<'a> {
     let music: Music = sdl2::mixer::Music::from_file(filename).unwrap();
-    if !music.play(1).is_ok() {
-        println!("Could not play file: {:?}", filename);
-    }
-    if !music.fade_in_from_pos(1, 10000, 10.0).is_ok() {
+    // NOTE(erick): -1 loops forever.
+    if !music.play(-1).is_ok() {
         println!("Could not play file: {:?}", filename);
     }
 
@@ -948,8 +946,9 @@ fn main() {
         // This code need to be generalized, but I don't know to to generalize it yet.
         // TODO(erick): Entity-vs-entity collision when the second entity is not movable
         // is not handled yet.
+        move_direction.normalize_or_zero();
+
         {
-            move_direction.normalize_or_zero();
             if !move_direction.is_zero() {
                 let movement = move_direction * (dt * 7.0f32);
                 let mut allowed_movement = player.collision_against_tiles(&map, movement);
