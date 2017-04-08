@@ -836,41 +836,14 @@ fn main() {
     let mut keyboard_input = GameInputState::new();
     let mut joystick_input = GameInputState::new();
 
-    let (_map, player_position) = parse_level("1-starting", &renderer).unwrap();
-    let mut map = _map;
-
-    // let mut default_textures = HashMap::new();
-    // default_textures.insert("wall_tile",        "wall.bmp"  .to_string());
-    // default_textures.insert("floor_tile",       "floor.bmp" .to_string());
-    // default_textures.insert("target_tile",      "target.bmp".to_string());
-    // default_textures.insert("box_sprite_sheet", "box.bmp"   .to_string());
-    // write_level_file("3-zimbrao", &map, &default_textures, (player_position.0 as u32, player_position.1 as u32));
-
     //
-    // Player
+    // Player and Map
     //
-    let player_anim_info = AnimationInfo::new(false, 0);
-    // TODO(erick): Since we now use a Rc to store the sprite texture we
-    // don't need to hold the texture here anymore. This two lines can be handled by a single function
-    let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
-    let player_sprite = SpriteSheet::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h, player_anim_info);
-
-    let player_x = player_position.0 as f32;
-    let player_y = player_position.1 as f32;
-    let player_width_to_height_ratio = texture_w as f32 / texture_h as f32;
-
-    let player_draw_height = 1.2;
-    let player_draw_width = player_draw_height * player_width_to_height_ratio;
-
-    let player_collision_height = 0.8;
-    let player_colliion_width  = player_draw_width;
-
-    let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y),
-                        player_colliion_width, player_collision_height,
-                        player_draw_width, player_draw_height);
-    player.center_on_current_tile_rect();
-
-
+    let (mut map, mut player) = parse_level("1-starting", &renderer).unwrap();
+    
+    
+    // NOTE(erick): Running cat animation stuff. This is only so we can have
+    // an example of the animation code
     let mut cat_anim_info = AnimationInfo::new(true, 12);
     cat_anim_info.animation_lanes.push(AnimationLane{number_of_frames: 6});
     cat_anim_info.animation_lanes.push(AnimationLane{number_of_frames: 6});
@@ -881,6 +854,7 @@ fn main() {
     let running_cat_height = running_cat_width * 82.0 / 128.0;
     let mut running_cat = Entity::new(running_cat_sprite, Vector2::new(16.0, 13.5), running_cat_width, running_cat_height, running_cat_width, running_cat_height);
 
+    
     game_state.is_running = true;
     while game_state.is_running {
 
@@ -1046,6 +1020,30 @@ enum AssetType {
     Level,
 }
 
+fn create_player(player_position: (u32, u32), renderer: &Renderer) -> Entity {
+    let player_anim_info = AnimationInfo::new(false, 0);
+
+    let (player_texture, texture_w, texture_h) = texture_from_path(Path::new("assets/player.bmp"), &renderer);
+    let player_sprite = SpriteSheet::new(Rc::new(player_texture), texture_w, texture_h, texture_w, texture_h, player_anim_info);
+
+    let player_x = player_position.0 as f32;
+    let player_y = player_position.1 as f32;
+    let player_width_to_height_ratio = texture_w as f32 / texture_h as f32;
+
+    let player_draw_height = 1.2;
+    let player_draw_width = player_draw_height * player_width_to_height_ratio;
+
+    let player_collision_height = 0.8;
+    let player_colliion_width  = player_draw_width;
+
+    let mut player = Entity::new(player_sprite, Vector2::new(player_x, player_y),
+                        player_colliion_width, player_collision_height,
+                        player_draw_width, player_draw_height);
+    player.center_on_current_tile_rect();
+
+    player
+}
+
 fn asset_path_string(asset_type: AssetType, asset_name: &str) -> String {
     let mut result = String::new();
 
@@ -1183,7 +1181,7 @@ fn write_map_file(map_path: &Path, map: &Map) {
     }
 }
 
-fn parse_level(level_name: &str, renderer: &Renderer) -> (Option<(Map, (u32, u32))>) {
+fn parse_level(level_name: &str, renderer: &Renderer) -> (Option<(Map, Entity)>) {
     let mut filename = String::from(level_name);
     filename.push_str(".lvl");
 
@@ -1326,7 +1324,8 @@ fn parse_level(level_name: &str, renderer: &Renderer) -> (Option<(Map, (u32, u32
                      box_position_x, box_position_y);
     }
 
-    Some((result_map, _player_position.unwrap()))
+    let player = create_player(_player_position.unwrap(), renderer);
+    Some((result_map, player))
 }
 
 fn parse_or_none<T> (s: &str) -> Option<T> where T: std::str::FromStr {
