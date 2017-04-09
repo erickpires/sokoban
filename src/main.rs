@@ -32,7 +32,9 @@ use std::fs::File;
 use std::io::Write;
 
 use std::ops::Add;
+use std::ops::Sub;
 use std::ops::Mul;
+use std::ops::Div;
 use std::ops::AddAssign;
 
 use regex::Regex;
@@ -78,6 +80,41 @@ impl Vector2 {
         }
     }
 }
+
+impl Sub for Vector2 {
+    type Output = Vector2;
+
+    fn sub(self, rhs: Vector2) -> Vector2 {
+
+        let result = Vector2 {
+            x : self.x - rhs.x,
+            y : self.y - rhs.y,
+        };
+
+        result
+    }
+}
+
+impl Div<f32> for Vector2 {
+    type Output = Vector2;
+
+    fn div(self, rhs: f32) -> Vector2 {
+        let result = Vector2 {
+            x : self.x / rhs,
+            y : self.y / rhs,
+        };
+
+        result
+    }
+}
+
+impl AddAssign for Vector2 {
+    fn add_assign(&mut self, rhs: Vector2) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
 
 #[derive(Debug)]
 #[derive(Clone)]
@@ -452,7 +489,9 @@ impl SpriteSheet {
 #[allow(dead_code)]
 #[derive(Clone)]
 struct Entity {
-    position    : Vector2,
+    position     : Vector2,
+    velocity     : Vector2,
+    acceleration : Vector2,
     draw_height         : f32,
     draw_width          : f32,
 
@@ -465,7 +504,10 @@ struct Entity {
 impl Entity {
     fn new(s: SpriteSheet, p0: Vector2, collision_w: f32, collision_h: f32, draw_w: f32, draw_h: f32) -> Entity {
         Entity{
-            position    : p0,
+            position     : p0,
+            velocity     : Vector2::zero(),
+            acceleration : Vector2::zero(),
+
             draw_height         : draw_h,
             draw_width          : draw_w,
 
@@ -659,6 +701,9 @@ impl Map {
                 x: _x as f32,
                 y: _y as f32,
             },
+            velocity     : Vector2::zero(),
+            acceleration : Vector2::zero(),
+
             draw_width          : 1.0,
             draw_height         : 1.0,
             collision_width     : 1.0,
@@ -949,28 +994,20 @@ fn main() {
         // This code need to be generalized, but I don't know to to generalize it yet.
         // TODO(erick): Entity-vs-entity collision when the second entity is not movable
         // is not handled yet.
-        move_direction.normalize_or_zero();
 
-        {
-            if !move_direction.is_zero() {
-                let movement = move_direction * (dt * 7.0f32);
-                let mut allowed_movement = player.collision_against_tiles(&map, movement);
-                if !allowed_movement.is_zero() {
-                    let box_index = player.collision_against_entities(&map.boxes, allowed_movement);
-                    if box_index != -1 {
-                        let _box = map.boxes[box_index as usize].clone();
+        fn move_entity(entity: &mut Entity, mut force: Vector2, map: &mut Map, dt: f32) {
+            const entity_mass : f32 = 0.0058;
+            const drag : f32 = 20.0;
 
-                        allowed_movement = _box.collision_against_tiles(&map, allowed_movement);
-                        map.boxes[box_index as usize].position += &allowed_movement;
-                    }
+            force.normalize_or_zero();
 
-                    player.position += &allowed_movement;
-                }
-            } else {
-                // player.center_on_current_tile_rect();
-            }
+            entity.acceleration = force / entity_mass - entity.velocity * drag;
+            entity.velocity += entity.acceleration * dt;
+            entity.position += entity.velocity * dt;
+
         }
 
+        move_entity(&mut player, move_direction, &mut map, dt);
 
         {
             let mut end_game = true;
