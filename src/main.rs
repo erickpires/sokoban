@@ -814,11 +814,13 @@ fn main() {
     let game_controller_subsystem = sdl_context.game_controller().unwrap();
     let mut timer = sdl_context.timer().unwrap();
     let mut events = sdl_context.event_pump().unwrap();
+    #[allow(unused_variables)]
     let mixer = AudioMixer::new(&sdl_context);
 
 
     // NOTE(erick): controller has to be here because
     // we stop receiving messages once it's dropped.
+    #[allow(unused_variables)]
     let controller = init_controller(&game_controller_subsystem);
 
 
@@ -837,13 +839,14 @@ fn main() {
     // Player and Map
     //
     let (mut map, mut player) = parse_level("1-starting", &renderer).unwrap();
-    
+
+    #[allow(unused_variables)]
     let level_music;
     if !map.level_music.is_none() {
         level_music = play_music(Path::new(map.level_music.as_ref().unwrap().as_str()));
     }
-    
-    
+
+
     // NOTE(erick): Running cat animation stuff. This is only so we can have
     // an example of the animation code
     let mut cat_anim_info = AnimationInfo::new(true, 12);
@@ -856,7 +859,7 @@ fn main() {
     let running_cat_height = running_cat_width * 82.0 / 128.0;
     let mut running_cat = Entity::new(running_cat_sprite, Vector2::new(16.0, 13.5), running_cat_width, running_cat_height, running_cat_width, running_cat_height);
 
-    
+
     game_state.is_running = true;
     while game_state.is_running {
 
@@ -1431,7 +1434,7 @@ fn draw_text(renderer: &mut Renderer, font: &Font, color: Color, string: &String
 
     let TextureQuery { width: text_width, height: text_height, .. } = text_texture.query();
     let text_rect;
-    
+
     if centered {
         text_rect = Rect::new(text_x - (text_width / 2) as i32, text_y - (text_height / 2) as i32, text_width, text_height);
     } else {
