@@ -34,7 +34,7 @@ use sokoban::sdl_misc::*;
 #[allow(dead_code)]
 fn allowed_motion_before_collision(moving: &Rect2, direction: Vector2, obstacle: &Rect2) -> f32 {
     // TODO(erick): We should binary search and find the correct movement amount.
-    if moving.collides_with(obstacle) {
+    if !moving.collides_with(obstacle).is_none() {
         0.0
     } else {
         1.0
@@ -260,7 +260,7 @@ impl Entity {
             let ref entity = entities[index];
             let entity_rect = entity.containing_rect();
 
-            if target_rect.collides_with(&entity_rect) {
+            if !target_rect.collides_with(&entity_rect).is_none() {
                 return index as isize;
             }
         }
@@ -296,7 +296,7 @@ impl Entity {
                         y1: 1.0 + tile_y as f32,
                     };
 
-                    if target_rect.collides_with(&tile_rect) {
+                    if !target_rect.collides_with(&tile_rect).is_none() {
                         movement = Vector2::zero();
                         break 'outter;
                     }

@@ -218,6 +218,20 @@ impl Rect2 {
         }
     }
 
+    pub fn lower_right(&self) -> Vector2 {
+        Vector2 {
+            x: self.x1,
+            y: self.y0,
+        }
+    }
+
+    pub fn upper_left(&self) -> Vector2 {
+        Vector2 {
+            x: self.x0,
+            y: self.y1,
+        }
+    }
+
     pub fn upper_right(&self) -> Vector2 {
         Vector2 {
             x: self.x1,
@@ -225,49 +239,55 @@ impl Rect2 {
         }
     }
 
+
     // TODO(erick): It would be nice if we had some unit-test for this thing.
-    pub fn collides_with(&self, other: &Rect2) -> bool {
-        if self.x1 > other.x0 && self.x1 < other.x0 {
+    // NOTE(erick): This function returns None when no collision happened
+    // or a right-handed Vector2 containing the wall otherwise (the vector
+    // is not guaranteed to be normalized).
+    pub fn collides_with(&self, other: &Rect2) -> Option<Vector2> {
+        // TODO(erick): This does make sense. FIXME!!
+        if self.x1 > other.x0 && self.x1 < other.x1 {
             if self.y1 <= other.y0 {
-                return false;
+                return None;
             }
             if self.y0 >= other.y1 {
-                return false;
+                return None;
             }
-
-            return true;
+            // Collided from the right.
+            return Some(other.lower_left() - other.upper_left());
         }
-        if self.x0 < other.x1 && self.x1 > other.x0 {
+        if self.x0 < other.x1 && self.x0 > other.x0 {
             if self.y1 <= other.y0 {
-                return false;
+                return None;
             }
             if self.y0 >= other.y1 {
-                return false;
+                return None;
             }
-            return true;
+            // Collided from the left.
+            return Some(other.upper_right() - other.lower_right());
         }
-        if self.y1 > other.y0 && self.y1 < other.y0 {
+        if self.y1 > other.y0 && self.y1 < other.y1 {
             if self.x1 <= other.x0 {
-                return false;
+                return None;
             }
             if self.x0 >= other.x1 {
-                return false;
+                return None;
             }
-
-            return true;
+            // Collided from bellow.
+            return Some(other.lower_right() - other.lower_left());
         }
-        if self.y0 < other.y1 && self.y1 > other.y0 {
+        if self.y0 < other.y1 && self.y0 > other.y0 {
             if self.x1 <= other.x0 {
-                return false;
+                return None;
             }
             if self.x0 >= other.x1 {
-                return false;
+                return None;
             }
-
-            return true;
+            // COllided from above.
+            return Some(other.upper_left() - other.upper_right());
         }
 
-        return false;
+        return None;
     }
 }
 
