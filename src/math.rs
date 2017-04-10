@@ -4,6 +4,14 @@ use std::ops::Mul;
 use std::ops::Div;
 use std::ops::AddAssign;
 
+use std::cmp::min;
+use std::cmp::max;
+use std::cmp::Eq;
+use std::cmp::Ord;
+use std::cmp::PartialEq;
+use std::cmp::Ordering;
+
+
 
 #[derive(Debug)]
 #[derive(Clone)]
@@ -70,6 +78,21 @@ impl Sub for Vector2 {
     }
 }
 
+impl Add for Vector2 {
+    type Output = Vector2;
+
+    fn add(self, rhs: Vector2) -> Vector2 {
+
+        let result = Vector2 {
+            x : self.x + rhs.x,
+            y : self.y + rhs.y,
+        };
+
+        result
+    }
+}
+
+
 impl Div<f32> for Vector2 {
     type Output = Vector2;
 
@@ -97,6 +120,50 @@ impl<'a> AddAssign<&'a Vector2> for Vector2 {
     }
 }
 
+impl PartialEq for Vector2 {
+    // TODO(erick): This implementation is no different
+    // from the default implementation (derive). We should
+    // use deltas here.
+    fn eq(&self, other: &Vector2) -> bool {
+        self.x == other.x && self.y == other.y
+    }
+}
+
+impl Eq for Vector2 {}
+
+// NOTE(erick): We could simply derive this trait
+// since the default behavior is to do a lexicographic
+// comparison.
+impl Ord for Vector2 {
+    fn cmp(&self, other: &Vector2) -> Ordering {
+        if self == other {
+            return Ordering::Equal;
+        }
+        if self.x < other.x {
+            return Ordering::Less;
+        }
+        if self.x > other.x {
+            return Ordering::Greater;
+        }
+
+        if self.y < other.y {
+            return Ordering::Less;
+        }
+        if self.y > other.y {
+            return Ordering::Greater;
+        }
+
+        // Unreachable.
+        Ordering::Equal
+    }
+}
+
+impl PartialOrd for Vector2 {
+    fn partial_cmp(&self, other: &Vector2) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 #[derive(Debug)]
 #[derive(Clone)]
 #[derive(Copy)]
@@ -118,6 +185,43 @@ impl Rect2 {
 
             x1: point.x + width,
             y1: point.y + height,
+        }
+    }
+
+    pub fn from_points(p0: Vector2, p1: Vector2) -> Rect2 {
+        Rect2 {
+            x0: p0.x,
+            y0: p0.y,
+
+            x1: p1.x,
+            y1: p1.y,
+        }
+    }
+
+    pub fn bounding_rect(r0: &Rect2, r1: &Rect2) -> Rect2 {
+        let p0_0 = r0.lower_left();
+        let p0_1 = r1.lower_left();
+
+        let p1_0 = r0.upper_right();
+        let p1_1 = r1.upper_right();
+
+        let result_p0 = min(p0_0, p0_1);
+        let result_p1 = max(p1_0, p1_1);
+
+        Rect2::from_points(result_p0, result_p1)
+    }
+
+    pub fn lower_left(&self) -> Vector2 {
+        Vector2 {
+            x: self.x0,
+            y: self.y0,
+        }
+    }
+
+    pub fn upper_right(&self) -> Vector2 {
+        Vector2 {
+            x: self.x1,
+            y: self.y1,
         }
     }
 

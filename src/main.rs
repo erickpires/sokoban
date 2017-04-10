@@ -13,17 +13,9 @@ use sdl2::ttf::Font;
 use sdl2::pixels::Color;
 use sdl2::render::TextureQuery;
 
-use sdl2::mixer::{INIT_MP3, INIT_FLAC, INIT_MOD, INIT_FLUIDSYNTH, INIT_MODPLUG, INIT_OGG,
-                    AUDIO_S16LSB};
-use sdl2::mixer::Music;
-use sdl2::Sdl;
-
-use sdl2::GameControllerSubsystem;
-use sdl2::controller::GameController;
 use sdl2::controller::Axis::*;
 
 use std::path::Path;
-use std::collections::HashSet;
 use std::rc::Rc;
 
 use std::io::BufRead;
@@ -31,174 +23,13 @@ use std::io::BufReader;
 use std::fs::File;
 use std::io::Write;
 
-use std::ops::Add;
-use std::ops::Sub;
-use std::ops::Mul;
-use std::ops::Div;
-use std::ops::AddAssign;
-
 use regex::Regex;
 
 use std::collections::hash_map::HashMap;
 
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(Copy)]
-struct Vector2 {
-    x: f32,
-    y: f32,
-}
-
-impl Vector2 {
-    fn zero() -> Vector2 {
-        Vector2 {
-            x: 0.0f32,
-            y: 0.0f32
-        }
-    }
-
-    // TODO(erick): Compare with epsilon
-    fn is_zero(&self) -> bool {
-        self.x == 0.0 && self.y == 0.0
-    }
-
-    fn new(x0: f32, y0: f32) -> Vector2 {
-        Vector2{
-            x: x0,
-            y: y0
-        }
-    }
-
-    fn normalize_or_zero(&mut self) {
-        let denom = (self.x * self.x + self.y * self.y).sqrt();
-
-        if denom != 0.0f32 {
-            self.x /= denom;
-            self.y /= denom;
-        } else {
-            // if denom is zero the vector is already zero.
-        }
-    }
-}
-
-impl Sub for Vector2 {
-    type Output = Vector2;
-
-    fn sub(self, rhs: Vector2) -> Vector2 {
-
-        let result = Vector2 {
-            x : self.x - rhs.x,
-            y : self.y - rhs.y,
-        };
-
-        result
-    }
-}
-
-impl Div<f32> for Vector2 {
-    type Output = Vector2;
-
-    fn div(self, rhs: f32) -> Vector2 {
-        let result = Vector2 {
-            x : self.x / rhs,
-            y : self.y / rhs,
-        };
-
-        result
-    }
-}
-
-impl AddAssign for Vector2 {
-    fn add_assign(&mut self, rhs: Vector2) {
-        self.x += rhs.x;
-        self.y += rhs.y;
-    }
-}
-
-
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(Copy)]
-struct Rect2 {
-    // NOTE(erick): (x0, y0) is always the left-bottom point
-    // and (x1, y1) is always the right-top point.
-    x0: f32,
-    y0: f32,
-
-    x1: f32,
-    y1: f32,
-}
-
-impl Rect2 {
-    fn from_point_and_dimensions(point: Vector2, width: f32, height: f32) -> Rect2 {
-        Rect2 {
-            x0: point.x,
-            y0: point.y,
-
-            x1: point.x + width,
-            y1: point.y + height,
-        }
-    }
-
-    // TODO(erick): It would be nice if we had some unit-test for this thing.
-    fn collides_with(&self, other: &Rect2) -> bool {
-        if self.x1 > other.x0 && self.x1 < other.x0 {
-            if self.y1 <= other.y0 {
-                return false;
-            }
-            if self.y0 >= other.y1 {
-                return false;
-            }
-
-            return true;
-        }
-        if self.x0 < other.x1 && self.x1 > other.x0 {
-            if self.y1 <= other.y0 {
-                return false;
-            }
-            if self.y0 >= other.y1 {
-                return false;
-            }
-            return true;
-        }
-        if self.y1 > other.y0 && self.y1 < other.y0 {
-            if self.x1 <= other.x0 {
-                return false;
-            }
-            if self.x0 >= other.x1 {
-                return false;
-            }
-
-            return true;
-        }
-        if self.y0 < other.y1 && self.y1 > other.y0 {
-            if self.x1 <= other.x0 {
-                return false;
-            }
-            if self.x0 >= other.x1 {
-                return false;
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-}
-
-impl<'a> Add<Vector2> for &'a Rect2 {
-    type Output = Rect2;
-
-    fn add(self, translation: Vector2) -> Rect2 {
-        Rect2 {
-            x0: self.x0 + translation.x,
-            y0: self.y0 + translation.y,
-
-            x1: self.x1 + translation.x,
-            y1: self.y1 + translation.y,
-        }
-    }
-}
+extern crate sokoban;
+use sokoban::math::*;
+use sokoban::sdl_misc::*;
 
 #[allow(dead_code)]
 fn allowed_motion_before_collision(moving: &Rect2, direction: Vector2, obstacle: &Rect2) -> f32 {
@@ -208,116 +39,6 @@ fn allowed_motion_before_collision(moving: &Rect2, direction: Vector2, obstacle:
     } else {
         1.0
     }
-}
-
-impl Mul<f32> for Vector2 {
-    type Output = Vector2;
-
-    fn mul(self, rhs: f32) -> Vector2 {
-        Vector2 {
-            x: self.x * rhs,
-            y: self.y * rhs
-        }
-    }
-}
-
-impl<'a> AddAssign<&'a Vector2> for Vector2 {
-    fn add_assign(&mut self, rhs: &Vector2) {
-        self.x += rhs.x;
-        self.y += rhs.y;
-    }
-}
-
-struct AudioMixer {
-    frequency: i32,
-    format: u16,
-    channels: i32,
-    chunk_size: i32,
-
-    audio: Option<sdl2::AudioSubsystem>,
-    mixer_context: Option<sdl2::mixer::Sdl2MixerContext>,
-}
-
-impl AudioMixer {
-    fn new(sdl: &Sdl) -> AudioMixer {
-        let mut mixer = AudioMixer {
-            frequency: 44100,
-            format: AUDIO_S16LSB,
-            channels: 2,
-            chunk_size: 1024,
-            audio: None,
-            mixer_context: None
-        };
-
-        let _audio = sdl.audio().unwrap();
-        mixer.audio = Some(_audio);
-        let _mixer_context = sdl2::mixer::init(INIT_MP3 | INIT_FLAC | INIT_MOD | INIT_FLUIDSYNTH |
-                                               INIT_MODPLUG |
-                                               INIT_OGG)
-                                               .unwrap();
-
-        mixer.mixer_context = Some(_mixer_context);
-
-        sdl2::mixer::open_audio(mixer.frequency, mixer.format, mixer.channels, mixer.chunk_size).unwrap();
-        sdl2::mixer::allocate_channels(0);
-
-        mixer
-    }
-}
-
-fn play_music<'a> (filename: &Path) -> Music<'a> {
-    let music: Music = sdl2::mixer::Music::from_file(filename).unwrap();
-    // NOTE(erick): -1 loops forever.
-    if !music.play(-1).is_ok() {
-        println!("Could not play file: {:?}", filename);
-    }
-
-    music
-}
-
-fn find_sdl_gl_driver() -> Option<u32> {
-    for (index, item) in sdl2::render::drivers().enumerate() {
-        if item.name == "opengl" {
-            return Some(index as u32);
-        }
-    }
-    None
-}
-
-fn init_controller(game_controller_subsystem : &GameControllerSubsystem) -> Option<GameController> {
-    let available =
-        match game_controller_subsystem.num_joysticks() {
-            Ok(n)  => n,
-            Err(_) => 0,
-        };
-
-    println!("{} joysticks available", available);
-
-    let mut controller = None;
-
-    // Iterate over all available joysticks and look for game
-    // controllers.
-    for id in 0..available {
-        if game_controller_subsystem.is_game_controller(id) {
-            println!("Attempting to open controller {}", id);
-
-            match game_controller_subsystem.open(id) {
-                Ok(c) => {
-                    // We managed to find and open a game controller,
-                    // exit the loop
-                    println!("Success: opened \"{}\"", c.name());
-                    controller = Some(c);
-                    break;
-                },
-                Err(e) => println!("failed: {:?}", e),
-            }
-
-        } else {
-             println!("{} is not a game controller", id);
-        }
-    }
-
-    controller
 }
 
 const GAME_NAME : &'static str = "Sokoban";
@@ -492,18 +213,19 @@ struct Entity {
     position     : Vector2,
     velocity     : Vector2,
     acceleration : Vector2,
-    draw_height         : f32,
-    draw_width          : f32,
 
-    collision_width     : f32,
-    collision_height    : f32,
+    draw_height      : f32,
+    draw_width       : f32,
+
+    collision_width  : f32,
+    collision_height : f32,
 
     sprite_sheet : SpriteSheet,
 }
 
 impl Entity {
     fn new(s: SpriteSheet, p0: Vector2, collision_w: f32, collision_h: f32, draw_w: f32, draw_h: f32) -> Entity {
-        Entity{
+        Entity {
             position     : p0,
             velocity     : Vector2::zero(),
             acceleration : Vector2::zero(),
@@ -546,16 +268,24 @@ impl Entity {
         -1
     }
 
-    fn collision_against_tiles(&self, map: &Map, mut direction: Vector2) -> Vector2 {
+    fn collision_against_tiles(&self, map: &Map, mut movement: Vector2) -> Vector2 {
         let entity_rect = self.containing_rect();
 
-        let target_rect = &entity_rect + direction;
+        let target_rect = &entity_rect + movement;
 
-        // TODO(erick): We should probably write an iterator for this operation
-        // TODO(erick): If we know where we are and where we are heading to we don't
-        // need to look at all the tiles
-        'outter: for tile_y in 0..map.n_lines() {
-            for tile_x in 0..map.n_cols() {
+        // NOTE(erick): We only need to search inside the bounding rectangle
+        let bounding_rect = Rect2::bounding_rect(&entity_rect, &target_rect);
+        let min_point = bounding_rect.lower_left();
+        let max_point = bounding_rect.upper_right();
+
+        let min_tile_x = min_point.x.floor() as u32; // Inclusive
+        let min_tile_y = min_point.y.floor() as u32; // Inclusive
+
+        let max_tile_x = max_point.x.ceil() as u32; // Exclusive
+        let max_tile_y = max_point.y.ceil() as u32; // Exclusive
+
+        'outter: for tile_y in min_tile_y..max_tile_y {
+            for tile_x in min_tile_x..max_tile_x {
                 let tile_type = map.tile_at(tile_x, tile_y);
                 if let TileType::Wall = tile_type {
                     let tile_rect = Rect2 {
@@ -567,14 +297,14 @@ impl Entity {
                     };
 
                     if target_rect.collides_with(&tile_rect) {
-                        direction = Vector2::zero();
+                        movement = Vector2::zero();
                         break 'outter;
                     }
                 }
             }
         }
 
-        direction
+        movement
     }
 
     fn draw(&self, renderer: &mut Renderer) {
@@ -823,14 +553,6 @@ impl Map {
     }
 }
 
-fn texture_from_path(path: &Path, renderer: &Renderer) -> (Texture, u32, u32) {
-    let temp_surface = sdl2::surface::Surface::load_bmp(path).unwrap();
-
-    let texture = renderer.create_texture_from_surface(&temp_surface).unwrap();
-
-    (texture, temp_surface.width(), temp_surface.height())
-}
-
 fn main() {
     let mut game_state : GameState = GameState::new();
 
@@ -934,6 +656,7 @@ fn main() {
                         }
                     }
 
+                    // TODO(erick): This code must be transfered to sdl_misc
                     if axis == LeftX {
                         handle_axis_input(&mut joystick_input.left_x_axis, val);
                     }
@@ -1003,7 +726,10 @@ fn main() {
 
             entity.acceleration = force / entity_mass - entity.velocity * drag;
             entity.velocity += entity.acceleration * dt;
-            entity.position += entity.velocity * dt;
+            let mut target_movement = entity.velocity * dt;
+
+            target_movement = entity.collision_against_tiles(map, target_movement);
+            entity.position += target_movement;
 
         }
 
@@ -1460,6 +1186,8 @@ fn parse_position_tuple_vec(s: &str) -> Option<Vec< (u32, u32) > > {
     Some(result)
 }
 
+// TODO(erick): We should eventually create a tait Draw so we can move this
+// function to a separate file and impl draw for Entity
 fn draw_text(renderer: &mut Renderer, font: &Font, color: Color, string: &String, position: Vector2, centered: bool) {
     let text_surface = font.render(string)
         .blended(color).unwrap();
@@ -1479,10 +1207,4 @@ fn draw_text(renderer: &mut Renderer, font: &Font, color: Color, string: &String
     }
 
     renderer.copy(&mut text_texture, None, Some(text_rect)).unwrap();
-}
-
-fn pressed_keycode_set(e: &sdl2::EventPump) -> HashSet<Keycode> {
-    e.keyboard_state().pressed_scancodes()
-        .filter_map(Keycode::from_scancode)
-        .collect()
 }
